@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Dashboard from './views/Dashboard';
+import { InstallPWA } from './components/InstallPWA';
 import { LogIn, Sparkles, Languages } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
@@ -129,6 +130,7 @@ export default function App() {
   return (
     <Router>
       <AuthProvider>
+        <InstallPWA />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route 

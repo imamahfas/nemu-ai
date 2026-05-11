@@ -24,7 +24,9 @@ import { useTranslation } from 'react-i18next';
 import { handleFirestoreError, OperationType } from '../lib/error-utils';
 import { TransactionForm } from '../components/TransactionForm';
 import { KidsModal } from '../components/KidsModal';
+import { AnalyticsModal } from '../components/AnalyticsModal';
 import { claimTask } from '../lib/kidsService';
+import { generateFinancialAdvice } from '../lib/aiCoach';
 
 export default function Dashboard() {
   const { user, profile, logout } = useAuth();
@@ -34,7 +36,11 @@ export default function Dashboard() {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isTxFormOpen, setIsTxFormOpen] = useState(false);
   const [isKidsModalOpen, setIsKidsModalOpen] = useState(false);
+  const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [scannerData, setScannerData] = useState<any>(null);
+  
+  const [aiAdvice, setAiAdvice] = useState<string>('');
+  const [isGeneratingAdvice, setIsGeneratingAdvice] = useState(false);
   
   const [kidWallets, setKidWallets] = useState<any[]>([]);
   const [tasks, setTasks] = useState<any[]>([]);
@@ -45,6 +51,14 @@ export default function Dashboard() {
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'id' ? 'en' : 'id');
+  };
+
+  const loadAiAdvice = async () => {
+    if (isGeneratingAdvice) return;
+    setIsGeneratingAdvice(true);
+    const advice = await generateFinancialAdvice(recentTransactions, i18n.language);
+    setAiAdvice(advice);
+    setIsGeneratingAdvice(false);
   };
 
   useEffect(() => {
@@ -222,13 +236,19 @@ const containerVariants = {
                   <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Real-time Analysis</p>
                 </div>
               </div>
-              <button onClick={handleComingSoon} className="text-[10px] bg-stone-50 text-stone-400 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors">Details</button>
+              <button 
+                onClick={loadAiAdvice} 
+                disabled={isGeneratingAdvice}
+                className="text-[10px] bg-stone-50 text-stone-400 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors disabled:opacity-50"
+              >
+                {isGeneratingAdvice ? 'Thinking...' : 'Analyze'}
+              </button>
             </div>
             <p className="text-stone-600 text-sm leading-relaxed font-medium italic">
-              {i18n.language === 'id' 
-                ? `"Pengeluaran belanja bulanan Anda naik 12%. Coba belanja grosir di pasar tradisional untuk menghemat sekitar ${formatCurrency(250000)} per bulan."`
-                : `"Your grocery spending is up 12% this month. Try bulk shopping at local markets to save around ${formatCurrency(250000)} monthly."`
-              }
+              {aiAdvice || (i18n.language === 'id' 
+                ? `"Ketuk tombol Analyze untuk mendapatkan analisis AI terhadap transaksi terbaru Anda."`
+                : `"Tap the Analyze button to get an AI analysis of your recent transactions."`
+              )}
             </p>
           </div>
         </motion.section>
@@ -391,7 +411,7 @@ const containerVariants = {
           <LayoutDashboard size={22} className="group-hover:scale-110" />
           <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full" />
         </button>
-        <button onClick={handleComingSoon} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+        <button onClick={() => setIsAnalyticsOpen(true)} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
           <PieChart size={22} className="group-hover:scale-110" />
         </button>
         <div className="h-4 w-[1px] bg-stone-700/50 mx-2" />
@@ -429,6 +449,12 @@ const containerVariants = {
         isOpen={isKidsModalOpen}
         onClose={() => setIsKidsModalOpen(false)}
         familyId={profile?.familyId || ''}
+      />
+
+      <AnalyticsModal
+        isOpen={isAnalyticsOpen}
+        onClose={() => setIsAnalyticsOpen(false)}
+        transactions={recentTransactions}
       />
     </div>
   );
