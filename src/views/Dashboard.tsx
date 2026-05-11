@@ -22,6 +22,9 @@ import { formatCurrency, cn } from '../lib/utils';
 import { CameraScanner } from '../components/CameraScanner';
 import { useTranslation } from 'react-i18next';
 import { handleFirestoreError, OperationType } from '../lib/error-utils';
+import { TransactionForm } from '../components/TransactionForm';
+import { KidsModal } from '../components/KidsModal';
+import { claimTask } from '../lib/kidsService';
 
 export default function Dashboard() {
   const { user, profile, logout } = useAuth();
@@ -29,7 +32,16 @@ export default function Dashboard() {
   const [family, setFamily] = useState<any>(null);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isTxFormOpen, setIsTxFormOpen] = useState(false);
+  const [isKidsModalOpen, setIsKidsModalOpen] = useState(false);
+  const [scannerData, setScannerData] = useState<any>(null);
+  
+  const [kidWallets, setKidWallets] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [savingGoals, setSavingGoals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleComingSoon = () => alert(t('coming_soon') + '!');
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'id' ? 'en' : 'id');
@@ -64,9 +76,23 @@ export default function Dashboard() {
       handleFirestoreError(error, OperationType.LIST, txPath);
     });
 
+    // Listen to kids data
+    const unsubKidWallets = onSnapshot(query(collection(db, 'kidWallets'), where('familyId', '==', profile.familyId)), snapshot => {
+      setKidWallets(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubTasks = onSnapshot(query(collection(db, 'tasks'), where('familyId', '==', profile.familyId)), snapshot => {
+      setTasks(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubGoals = onSnapshot(query(collection(db, 'savingGoals'), where('familyId', '==', profile.familyId)), snapshot => {
+      setSavingGoals(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+
     return () => {
       unsubFamily();
       unsubTransactions();
+      unsubKidWallets();
+      unsubTasks();
+      unsubGoals();
     };
   }, [profile?.familyId]);
 
@@ -165,7 +191,10 @@ const containerVariants = {
             </div>
 
             <div className="flex gap-4 relative z-10">
-              <button className="flex-1 h-14 bg-white text-stone-900 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-50 transition-all active:scale-95 shadow-lg shadow-black/20">
+              <button 
+                onClick={() => { setScannerData(null); setIsTxFormOpen(true); }}
+                className="flex-1 h-14 bg-white text-stone-900 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-50 transition-all active:scale-95 shadow-lg shadow-black/20"
+              >
                 <Plus size={20} /> {t('add_income')}
               </button>
               <button 
@@ -193,7 +222,7 @@ const containerVariants = {
                   <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Real-time Analysis</p>
                 </div>
               </div>
-              <button className="text-[10px] bg-stone-50 text-stone-400 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors">Details</button>
+              <button onClick={handleComingSoon} className="text-[10px] bg-stone-50 text-stone-400 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors">Details</button>
             </div>
             <p className="text-stone-600 text-sm leading-relaxed font-medium italic">
               {i18n.language === 'id' 
@@ -233,7 +262,7 @@ const containerVariants = {
               <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{t('recent_activity')}</h3>
               <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">Live Feed</p>
             </div>
-            <button className="text-xs text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full transition-all">
+            <button onClick={handleComingSoon} className="text-xs text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full transition-all">
               {t('view_all')}
             </button>
           </div>
@@ -295,37 +324,63 @@ const containerVariants = {
           </div>
 
           <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x relative z-10">
-            <div className="flex-shrink-0 bg-white p-6 rounded-[2.5rem] border border-emerald-50 w-52 space-y-5 shadow-sm snap-center hover:scale-105 transition-transform cursor-pointer">
-              <div className="flex justify-between items-start">
-                <div className="p-3 bg-orange-50 rounded-2xl text-orange-400">
-                  <Target size={24} />
+            {savingGoals.map(goal => (
+              <div key={goal.id} className="flex-shrink-0 bg-white p-6 rounded-[2.5rem] border border-emerald-50 w-52 space-y-5 shadow-sm snap-center hover:scale-105 transition-transform cursor-pointer">
+                <div className="flex justify-between items-start">
+                  <div className="p-3 bg-orange-50 rounded-2xl text-orange-400">
+                    <Target size={24} />
+                  </div>
+                  <div className="text-right">
+                    <span className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Status</span>
+                    <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
+                      {kidWallets.length > 0 ? Math.min(100, Math.round((kidWallets[0].balance / goal.targetAmount) * 100)) : 0}%
+                    </span>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <span className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Status</span>
-                  <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">65%</span>
+                <div>
+                  <p className="font-bold text-stone-800 leading-tight">{goal.title}</p>
+                  <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-widest">Savings Goal</p>
+                </div>
+                <div className="w-full bg-stone-50 h-2.5 rounded-full overflow-hidden shadow-inner p-0.5">
+                  <div 
+                    className="bg-emerald-500 h-full rounded-full shadow-lg shadow-emerald-100" 
+                    style={{ width: `${kidWallets.length > 0 ? Math.min(100, Math.round((kidWallets[0].balance / goal.targetAmount) * 100)) : 0}%` }}
+                  />
                 </div>
               </div>
-              <div>
-                <p className="font-bold text-stone-800 leading-tight">LEGO Star Wars Set</p>
-                <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-widest">Savings Goal</p>
-              </div>
-              <div className="w-full bg-stone-50 h-2.5 rounded-full overflow-hidden shadow-inner p-0.5">
-                <div className="bg-emerald-500 h-full w-[65%] rounded-full shadow-lg shadow-emerald-100" />
-              </div>
-            </div>
+            ))}
 
-            <div className="flex-shrink-0 bg-white p-6 rounded-[2.5rem] border border-emerald-50 w-52 space-y-4 shadow-sm snap-center hover:scale-105 transition-transform cursor-pointer">
-              <div className="bg-orange-50 w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner border border-orange-100">💰</div>
-              <div>
-                <p className="font-bold text-stone-800">Weekly Task</p>
-                <div className="flex items-center gap-2 mt-1">
-                  <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Clean Room</span>
-                  <span className="w-1 h-1 rounded-full bg-stone-300" />
-                  <span className="text-[10px] font-bold text-emerald-600">{formatCurrency(50000)}</span>
+            {tasks.filter(t => t.status !== 'completed').map(task => (
+              <div key={task.id} className="flex-shrink-0 bg-white p-6 rounded-[2.5rem] border border-emerald-50 w-52 space-y-4 shadow-sm snap-center hover:scale-105 transition-transform cursor-pointer">
+                <div className="bg-orange-50 w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner border border-orange-100">💰</div>
+                <div>
+                  <p className="font-bold text-stone-800">Task</p>
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest truncate max-w-[80px]">{task.title}</span>
+                    <span className="w-1 h-1 rounded-full bg-stone-300 flex-shrink-0" />
+                    <span className="text-[10px] font-bold text-emerald-600 truncate">{formatCurrency(task.rewardAmount)}</span>
+                  </div>
                 </div>
+                <button 
+                  onClick={async () => {
+                    if (kidWallets.length === 0) return alert("Please add a kid wallet first!");
+                    try {
+                      await claimTask(profile.familyId, kidWallets[0].id, task.id, task.rewardAmount, task.title);
+                    } catch (e: any) { alert(e.message); }
+                  }} 
+                  className="w-full bg-stone-900 text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest"
+                >
+                  {t('claim')}
+                </button>
               </div>
-              <button className="w-full bg-stone-900 text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest">Claim</button>
-            </div>
+            ))}
+            
+            {savingGoals.length === 0 && tasks.length === 0 && (
+              <div className="flex-shrink-0 bg-white/50 p-6 rounded-[2.5rem] border border-dashed border-emerald-200 w-52 flex flex-col items-center justify-center text-center">
+                 <p className="text-xs font-bold text-emerald-600 mb-2">No Goals or Tasks</p>
+                 <p className="text-[10px] text-stone-400 font-medium">Tap the Baby icon below to add kids and tasks!</p>
+              </div>
+            )}
           </div>
         </motion.section>
       </motion.main>
@@ -336,14 +391,14 @@ const containerVariants = {
           <LayoutDashboard size={22} className="group-hover:scale-110" />
           <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full" />
         </button>
-        <button className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+        <button onClick={handleComingSoon} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
           <PieChart size={22} className="group-hover:scale-110" />
         </button>
         <div className="h-4 w-[1px] bg-stone-700/50 mx-2" />
-        <button className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+        <button onClick={handleComingSoon} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
           <Target size={22} className="group-hover:scale-110" />
         </button>
-        <button className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+        <button onClick={() => setIsKidsModalOpen(true)} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
           <Baby size={22} className="group-hover:scale-110" />
         </button>
       </nav>
@@ -355,10 +410,26 @@ const containerVariants = {
           onScanComplete={(data) => {
             console.log("Scanned:", data);
             setIsScannerOpen(false);
-            // Handle save logic
+            setScannerData(data);
+            setIsTxFormOpen(true);
           }}
         />
       )}
+
+      {/* Transaction Form */}
+      <TransactionForm 
+        isOpen={isTxFormOpen}
+        onClose={() => { setIsTxFormOpen(false); setScannerData(null); }}
+        userId={user?.uid || ''}
+        familyId={profile?.familyId || ''}
+        initialData={scannerData}
+      />
+
+      <KidsModal 
+        isOpen={isKidsModalOpen}
+        onClose={() => setIsKidsModalOpen(false)}
+        familyId={profile?.familyId || ''}
+      />
     </div>
   );
 }

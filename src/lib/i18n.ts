@@ -28,7 +28,15 @@ const resources = {
       "home": "Home",
       "stats": "Stats",
       "goals": "Goals",
-      "kids": "Kids"
+      "kids": "Kids",
+      "add_transaction": "Add Transaction",
+      "review_receipt": "Review Receipt",
+      "expense": "Expense",
+      "amount": "Amount",
+      "title": "Title",
+      "category": "Category",
+      "save_transaction": "Save Transaction",
+      "claim": "Claim"
     }
   },
   id: {
@@ -56,7 +64,15 @@ const resources = {
       "home": "Beranda",
       "stats": "Statistik",
       "goals": "Target",
-      "kids": "Anak"
+      "kids": "Anak",
+      "add_transaction": "Tambah Transaksi",
+      "review_receipt": "Review Struk",
+      "expense": "Pengeluaran",
+      "amount": "Nominal",
+      "title": "Judul",
+      "category": "Kategori",
+      "save_transaction": "Simpan Transaksi",
+      "claim": "Klaim"
     }
   }
 };

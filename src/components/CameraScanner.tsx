@@ -67,7 +67,7 @@ export function CameraScanner({ onScanComplete, onClose }: {
         contents: [
           {
             parts: [
-              { text: "Extract receipt data: Store Name, Date, Total (as number), and Items (list of items with description and price). Return as JSON only." },
+              { text: "Extract receipt data from the image. Return ONLY a JSON object exactly with this structure: { 'Store Name': string, 'Date': string, 'Total': number, 'Category': string (e.g. Food, Transport, Shopping, Utilities), 'Items': [ { 'Name': string, 'Qty': number, 'Price': number, 'Category': string } ] }. Do not include markdown tags like ```json." },
               { inlineData: { data, mimeType: "image/jpeg" } }
             ]
           }
