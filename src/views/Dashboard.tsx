@@ -25,6 +25,9 @@ import { handleFirestoreError, OperationType } from '../lib/error-utils';
 import { TransactionForm } from '../components/TransactionForm';
 import { KidsModal } from '../components/KidsModal';
 import { AnalyticsModal } from '../components/AnalyticsModal';
+import { TransactionHistoryModal } from '../components/TransactionHistoryModal';
+import { FamilyGoalsModal } from '../components/FamilyGoalsModal';
+import { SettingsModal } from '../components/SettingsModal';
 import { claimTask } from '../lib/kidsService';
 import { generateFinancialAdvice } from '../lib/aiCoach';
 
@@ -37,6 +40,9 @@ export default function Dashboard() {
   const [isTxFormOpen, setIsTxFormOpen] = useState(false);
   const [isKidsModalOpen, setIsKidsModalOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isGoalsOpen, setIsGoalsOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [scannerData, setScannerData] = useState<any>(null);
   
   const [aiAdvice, setAiAdvice] = useState<string>('');
@@ -46,8 +52,6 @@ export default function Dashboard() {
   const [tasks, setTasks] = useState<any[]>([]);
   const [savingGoals, setSavingGoals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const handleComingSoon = () => alert(t('coming_soon') + '!');
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'id' ? 'en' : 'id');
@@ -130,6 +134,9 @@ const containerVariants = {
     }
   };
 
+  const isMarried = family?.spaceType !== 'unmarried';
+  const isChild = profile?.role === 'child';
+
   if (loading) return (
     <div className="min-h-screen bg-[#fdfcfb] flex flex-col items-center justify-center p-8 space-y-4">
       <div className="relative">
@@ -164,7 +171,12 @@ const containerVariants = {
             <span className="text-xs font-bold uppercase tracking-tight">{i18n.language}</span>
           </button>
           <div className="relative group">
-            <img src={user?.photoURL || ''} alt="Profile" className="w-11 h-11 rounded-2xl border-2 border-stone-100 shadow-sm cursor-pointer transition-transform group-hover:scale-105" />
+            <img 
+              onClick={() => setIsSettingsOpen(true)}
+              src={user?.photoURL || ''} 
+              alt="Profile" 
+              className="w-11 h-11 rounded-2xl border-2 border-stone-100 shadow-sm cursor-pointer transition-transform group-hover:scale-105" 
+            />
             <button 
               onClick={logout}
               className="absolute -top-1 -right-1 bg-white p-1 rounded-full border border-stone-100 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-rose-500"
@@ -190,7 +202,7 @@ const containerVariants = {
             <div className="flex justify-between items-start relative z-10">
               <div className="space-y-1">
                 <p className="text-stone-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                  <LayoutDashboard size={12} /> {t('shared_balance')}
+                  <LayoutDashboard size={12} /> {isMarried ? t('shared_balance') : 'Joint Balance'}
                 </p>
                 <h2 className="text-5xl font-brand font-bold tracking-tight text-white py-2">
                   {formatCurrency(family?.totalBalance || 0, family?.currency)}
@@ -282,7 +294,7 @@ const containerVariants = {
               <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{t('recent_activity')}</h3>
               <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">Live Feed</p>
             </div>
-            <button onClick={handleComingSoon} className="text-xs text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full transition-all">
+            <button onClick={() => setIsHistoryOpen(true)} className="text-xs text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full transition-all">
               {t('view_all')}
             </button>
           </div>
@@ -324,11 +336,12 @@ const containerVariants = {
           </div>
         </motion.section>
 
-        {/* Kids Kit - Gamified Visuals */}
-        <motion.section variants={itemVariants} className="bg-emerald-50/30 rounded-[3rem] p-8 space-y-6 border border-emerald-100 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-8 text-emerald-100/50">
-            <Baby size={120} strokeWidth={1} />
-          </div>
+        {/* Kids Kit - Gamified Visuals (Only shown if Married Mode) */}
+        {isMarried && (
+          <motion.section variants={itemVariants} className="bg-emerald-50/30 rounded-[3rem] p-8 space-y-6 border border-emerald-100 relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-8 text-emerald-100/50">
+              <Baby size={120} strokeWidth={1} />
+            </div>
           
           <div className="flex justify-between items-center relative z-10">
             <div className="flex items-center gap-3">
@@ -340,7 +353,6 @@ const containerVariants = {
                 <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest">Financial Education</p>
               </div>
             </div>
-            <span className="bg-emerald-600 text-white text-[10px] uppercase font-bold py-1.5 px-4 rounded-full shadow-lg shadow-emerald-100">{t('coming_soon')}</span>
           </div>
 
           <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x relative z-10">
@@ -400,9 +412,10 @@ const containerVariants = {
                  <p className="text-xs font-bold text-emerald-600 mb-2">No Goals or Tasks</p>
                  <p className="text-[10px] text-stone-400 font-medium">Tap the Baby icon below to add kids and tasks!</p>
               </div>
-            )}
-          </div>
-        </motion.section>
+              )}
+            </div>
+          </motion.section>
+        )}
       </motion.main>
 
       {/* Floating Premium Navigation */}
@@ -415,12 +428,14 @@ const containerVariants = {
           <PieChart size={22} className="group-hover:scale-110" />
         </button>
         <div className="h-4 w-[1px] bg-stone-700/50 mx-2" />
-        <button onClick={handleComingSoon} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+        <button onClick={() => setIsGoalsOpen(true)} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
           <Target size={22} className="group-hover:scale-110" />
         </button>
-        <button onClick={() => setIsKidsModalOpen(true)} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
-          <Baby size={22} className="group-hover:scale-110" />
-        </button>
+        {isMarried && (
+          <button onClick={() => setIsKidsModalOpen(true)} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+            <Baby size={22} className="group-hover:scale-110" />
+          </button>
+        )}
       </nav>
 
       {/* Camera Overlay */}
@@ -455,6 +470,26 @@ const containerVariants = {
         isOpen={isAnalyticsOpen}
         onClose={() => setIsAnalyticsOpen(false)}
         transactions={recentTransactions}
+      />
+
+      <TransactionHistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        familyId={profile?.familyId || ''}
+      />
+
+      <FamilyGoalsModal
+        isOpen={isGoalsOpen}
+        onClose={() => setIsGoalsOpen(false)}
+        familyId={profile?.familyId || ''}
+        totalBalance={family?.totalBalance || 0}
+        spaceType={family?.spaceType || 'married'}
+      />
+
+      <SettingsModal 
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        family={family}
       />
     </div>
   );

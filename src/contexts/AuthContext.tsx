@@ -38,12 +38,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           };
           await setDoc(doc(db, 'users', user.uid), defaultProfile);
           
+          // Generate a simple 6-char alphanumeric invite code
+          const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+
           // Initialize family
           await setDoc(doc(db, 'families', user.uid), {
-            name: `${user.displayName}'s Family`,
+            name: `${user.displayName}'s Space`,
             totalBalance: 0,
             currency: 'IDR',
             members: [user.uid],
+            spaceType: 'married', // Default mode
+            inviteCode: inviteCode,
             updatedAt: new Date().toISOString(),
           });
           
