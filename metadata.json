@@ -1,0 +1,6 @@
+{
+  "name": "Nemu",
+  "description": "Premium Family Finance PWA with AI-powered receipt scanning, shared wallets, and kids' financial education.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": []
+}

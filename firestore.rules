@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+
+    function isMemberOfFamily(familyId) {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/families/$(familyId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/families/$(familyId)).data.members
+      );
+    }
+
+    // --- User Rules ---
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId) && 
+        incoming().keys().hasAll(['uid', 'email', 'familyId', 'role']) &&
+        incoming().uid == userId;
+      allow update: if isOwner(userId) && 
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'familyId', 'role']);
+    }
+
+    // --- Family Rules ---
+    match /families/{familyId} {
+      allow read: if isMemberOfFamily(familyId);
+      allow create: if isSignedIn() && incoming().members.hasAll([request.auth.uid]);
+      allow update: if isMemberOfFamily(familyId);
+    }
+
+    // --- Transaction Rules ---
+    function isValidTransaction(data) {
+      return data.userId == request.auth.uid &&
+             data.amount is number &&
+             data.amount > 0 &&
+             data.type in ['expense', 'income'] &&
+             isValidId(data.familyId);
+    }
+
+    match /transactions/{transactionId} {
+      allow read: if isSignedIn() && isMemberOfFamily(existing().familyId);
+      allow list: if isSignedIn() && resource.data.familyId != null && isMemberOfFamily(resource.data.familyId);
+      allow create: if isSignedIn() && isValidTransaction(incoming()) && isMemberOfFamily(incoming().familyId);
+      allow update: if false; // Transactions are immutable for audit
+      allow delete: if false;
+    }
+
+    // --- Kid Wallet Rules ---
+    match /kidWallets/{walletId} {
+      allow read: if isMemberOfFamily(existing().familyId);
+      allow write: if isMemberOfFamily(incoming().familyId);
+    }
+
+    // --- Saving Goals ---
+    match /savingGoals/{goalId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+
+    // --- Tasks ---
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn();
+    }
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "familyId": { "type": "string" },
+        "role": { "type": "string", "enum": ["parent", "kid"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "familyId", "role"]
+    },
+    "Family": {
+      "title": "Family",
+      "description": "Shared family wallet and settings",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "totalBalance": { "type": "number" },
+        "currency": { "type": "string" },
+        "budgets": {
+          "type": "object",
+          "description": "Category limits"
+        },
+        "members": { "type": "array", "items": { "type": "string" } },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Individual expense or income",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "familyId": { "type": "string" },
+        "amount": { "type": "number" },
+        "type": { "type": "string", "enum": ["expense", "income"] },
+        "category": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "description": { "type": "string" },
+        "receiptUrl": { "type": "string" },
+        "approved": { "type": "boolean" },
+        "isAiGenerated": { "type": "boolean" }
+      },
+      "required": ["userId", "familyId", "amount", "type", "date"]
+    },
+    "KidWallet": {
+      "title": "KidWallet",
+      "description": "Virtual pocket money for kids",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "familyId": { "type": "string" },
+        "balance": { "type": "number" },
+        "allowance": { "type": "number" },
+        "allowanceFrequency": { "type": "string", "enum": ["weekly", "monthly"] }
+      }
+    },
+    "SavingGoal": {
+      "title": "SavingGoal",
+      "description": "Kids saving target",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "completed"] }
+      }
+    },
+    "Task": {
+      "title": "Task",
+      "description": "Educational tasks for rewards",
+      "type": "object",
+      "properties": {
+        "kidId": { "type": "string" },
+        "parentId": { "type": "string" },
+        "description": { "type": "string" },
+        "reward": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "done", "approved"] }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "User", "description": "User profiles" },
+    "/families/{familyId}": { "schema": "Family", "description": "Family shared data" },
+    "/transactions/{transactionId}": { "schema": "Transaction", "description": "Global transactions log" },
+    "/kidWallets/{walletId}": { "schema": "KidWallet", "description": "Kid virtual wallets" },
+    "/savingGoals/{goalId}": { "schema": "SavingGoal", "description": "Saving goals for kids" },
+    "/tasks/{taskId}": { "schema": "Task", "description": "Tasks for kids" }
+  }
+}
