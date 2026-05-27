@@ -127,33 +127,43 @@ function LoginPage() {
   );
 }
 
-export default function App() {
+function AppContent() {
   const [showSplash, setShowSplash] = useState(true);
+  const { loading: authLoading } = useAuth();
 
   return (
     <>
       <AnimatePresence mode="wait">
         {showSplash && (
-          <SplashScreen onComplete={() => setShowSplash(false)} />
+          <SplashScreen 
+            authLoading={authLoading} 
+            onComplete={() => setShowSplash(false)} 
+          />
         )}
       </AnimatePresence>
 
-      <Router>
-        <AuthProvider>
-          <InstallPWA />
-          <Routes>
-            <Route path="/login" element={<LoginPage />} />
-            <Route 
-              path="/" 
-              element={
-                <ProtectedRoute>
-                  <Dashboard />
-                </ProtectedRoute>
-              } 
-            />
-          </Routes>
-        </AuthProvider>
-      </Router>
+      <InstallPWA />
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route 
+          path="/" 
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } 
+        />
+      </Routes>
     </>
+  );
+}
+
+export default function App() {
+  return (
+    <Router>
+      <AuthProvider>
+        <AppContent />
+      </AuthProvider>
+    </Router>
   );
 }

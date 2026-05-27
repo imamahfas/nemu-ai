@@ -2,7 +2,13 @@ import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 
-export function SplashScreen({ onComplete }: { onComplete: () => void }) {
+export function SplashScreen({ 
+  authLoading, 
+  onComplete 
+}: { 
+  authLoading: boolean; 
+  onComplete: () => void; 
+}) {
   const [progress, setProgress] = useState(0);
 
   // Ultra-safe synchronous browser-level language detection bypassing React i18n Suspense boundaries
@@ -19,20 +25,31 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
           clearInterval(interval);
           return 100;
         }
-        // Accelerate/Decelerate speed slightly for dynamic feel
-        const step = prev < 30 ? 3 : prev < 75 ? 2 : 1;
-        return Math.min(100, prev + step);
+
+        // If the database has finished loading, surge progress to 100% instantly!
+        if (!authLoading) {
+          return Math.min(100, prev + 15);
+        }
+
+        // If the database is still loading, cruise and hold at 92% to wait for auth state
+        if (prev >= 92) {
+          return 92;
+        }
+
+        // Normal dynamic increment step
+        const step = prev < 30 ? 4 : prev < 75 ? 3 : 2;
+        return Math.min(92, prev + step);
       });
-    }, 28); // ~2 seconds complete lifecycle
+    }, 20); // Super fast 20ms cycles for ultra-responsive feedback
     return () => clearInterval(interval);
-  }, []);
+  }, [authLoading]);
 
   // Smooth fade-out delay after loading achieves 100%
   useEffect(() => {
     if (progress === 100) {
       const delay = setTimeout(() => {
         onComplete();
-      }, 400);
+      }, 350); // Snappy exit delay
       return () => clearTimeout(delay);
     }
   }, [progress, onComplete]);
