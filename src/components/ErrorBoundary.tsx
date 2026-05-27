@@ -36,6 +36,14 @@ export class ErrorBoundary extends Component<Props, State> {
       localStorage.clear();
       sessionStorage.clear();
 
+      // Clear all caches in the Cache Storage API
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        for (const cacheName of cacheNames) {
+          await caches.delete(cacheName);
+        }
+      }
+
       // Unregister all service workers
       if ('serviceWorker' in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
