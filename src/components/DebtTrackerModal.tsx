@@ -24,7 +24,12 @@ export function DebtTrackerModal({ isOpen, onClose, totalBalance, onRepay, space
   currency?: string;
 }) {
   const { t, i18n } = useTranslation();
-  const [debts, setDebts] = useState<Debt[]>([]);
+  // Load debts directly from localStorage with clean slate fallback
+  const [debts, setDebts] = useState<Debt[]>(() => {
+    const saved = localStorage.getItem(`nemu_debts_${spaceType}`);
+    return saved ? JSON.parse(saved) : [];
+  });
+  
   const [isAdding, setIsAdding] = useState(false);
   
   // Form State
@@ -34,33 +39,10 @@ export function DebtTrackerModal({ isOpen, onClose, totalBalance, onRepay, space
   const [interestType, setInterestType] = useState<'fixed' | 'floating'>('fixed');
   const [tenor, setTenor] = useState('');
 
-  // Load mock debts initially
+  // Persist debts on updates
   useEffect(() => {
-    if (isOpen && debts.length === 0) {
-      setDebts([
-        {
-          id: '1',
-          lender: 'Mandiri Bank (KTA)',
-          principal: 24000000,
-          interestRate: 10,
-          interestType: 'fixed',
-          tenor: 12,
-          paidAmount: 8000000,
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 120).toISOString() // 4 months ago
-        },
-        {
-          id: '2',
-          lender: 'BCA Credit Card',
-          principal: 5000000,
-          interestRate: 15,
-          interestType: 'floating',
-          tenor: 6,
-          paidAmount: 2500000,
-          createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24 * 90).toISOString() // 3 months ago
-        }
-      ]);
-    }
-  }, [isOpen, debts.length]);
+    localStorage.setItem(`nemu_debts_${spaceType}`, JSON.stringify(debts));
+  }, [debts, spaceType]);
 
   const handleAddDebt = (e: React.FormEvent) => {
     e.preventDefault();

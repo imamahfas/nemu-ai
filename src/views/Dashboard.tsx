@@ -75,6 +75,62 @@ export default function Dashboard() {
   const [isHealthDetailOpen, setIsHealthDetailOpen] = useState(false);
   const [healthDetailTab, setHealthDetailTab] = useState<'health' | 'dti'>('health');
 
+  // Sync dashboard debts dynamically from localStorage
+  const [dashboardDebts, setDashboardDebts] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (family?.spaceType) {
+      const saved = localStorage.getItem(`nemu_debts_${family.spaceType}`);
+      setDashboardDebts(saved ? JSON.parse(saved) : []);
+    } else {
+      setDashboardDebts([]);
+    }
+  }, [family?.spaceType, isDebtTrackerOpen]);
+
+  // Derived Cash Flow Metrics
+  const totalIncome = recentTransactions
+    .filter(t => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalExpense = recentTransactions
+    .filter(t => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  // Derived Debt Metrics
+  const activeDebts = dashboardDebts.filter(d => {
+    const totalObligation = d.principal * (1 + (d.interestRate / 100) * (d.tenor / 12));
+    return d.paidAmount < totalObligation;
+  });
+
+  const totalMonthlyObligation = activeDebts.reduce((sum, d) => {
+    const totalObligation = d.principal * (1 + (d.interestRate / 100) * (d.tenor / 12));
+    const monthlyInstallment = totalObligation / d.tenor;
+    return sum + monthlyInstallment;
+  }, 0);
+
+  const monthlyIncome = totalIncome > 0 ? totalIncome : 12500000;
+  const dtiRatio = totalMonthlyObligation > 0 ? Math.round((totalMonthlyObligation / monthlyIncome) * 100) : 0;
+
+  // Derived Health Score Engine
+  const calculateHealthScore = () => {
+    if (recentTransactions.length === 0 && activeDebts.length === 0) return 100;
+    
+    let score = 100;
+    score -= Math.min(40, dtiRatio);
+    
+    const savingsRate = totalIncome > 0 ? ((totalIncome - totalExpense) / totalIncome) * 100 : 0;
+    if (totalIncome > 0) {
+      if (savingsRate < 0) score -= 25;
+      else if (savingsRate < 10) score -= 15;
+      else if (savingsRate < 30) score -= 5;
+    } else if (totalExpense > 0) {
+      score -= 20;
+    }
+    return Math.max(10, Math.min(100, score));
+  };
+
+  const healthScore = calculateHealthScore();
+
   const handleRepay = async (amount: number, description: string) => {
     if (!profile?.familyId || !user) return;
     await FirestoreSchema.addTransaction({
@@ -282,11 +338,19 @@ const containerVariants = {
           >
             <div className="space-y-1">
               <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('financial_health')}</span>
-              <h4 className="text-xl font-brand font-bold text-stone-800">88 / 100</h4>
-              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase">{t('excellent')}</span>
+              <h4 className="text-xl font-brand font-bold text-stone-800">{healthScore} / 100</h4>
+              <span className={cn(
+                "text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase",
+                healthScore >= 80 ? "text-emerald-600 bg-emerald-50" : healthScore >= 50 ? "text-orange-600 bg-orange-50" : "text-rose-600 bg-rose-50"
+              )}>
+                {healthScore >= 80 ? t('excellent') : healthScore >= 50 ? (isId ? 'Cukup Sehat' : 'Fair') : (isId ? 'Buruk' : 'Critical')}
+              </span>
             </div>
-            <div className="w-10 h-10 rounded-full border-[3px] border-stone-100 border-t-emerald-500 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow">
-              88%
+            <div className={cn(
+              "w-10 h-10 rounded-full border-[3px] border-stone-100 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow",
+              healthScore >= 80 ? "border-t-emerald-500" : healthScore >= 50 ? "border-t-orange-400" : "border-t-rose-500"
+            )}>
+              {healthScore}%
             </div>
           </div>
           <div 
@@ -295,11 +359,19 @@ const containerVariants = {
           >
             <div className="space-y-1">
               <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('debt_to_income')}</span>
-              <h4 className="text-xl font-brand font-bold text-stone-800">24% {t('ratio')}</h4>
-              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase">{t('healthy_limit')}</span>
+              <h4 className="text-xl font-brand font-bold text-stone-800">{dtiRatio}% {t('ratio')}</h4>
+              <span className={cn(
+                "text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase",
+                dtiRatio < 30 ? "text-emerald-600 bg-emerald-50" : dtiRatio <= 50 ? "text-orange-600 bg-orange-50" : "text-rose-600 bg-rose-50"
+              )}>
+                {dtiRatio < 30 ? (isId ? 'Batas Aman' : 'Healthy Limit') : dtiRatio <= 50 ? (isId ? 'Waspada' : 'Moderate') : (isId ? 'Beban Tinggi' : 'High Obligation')}
+              </span>
             </div>
-            <div className="w-10 h-10 rounded-full border-[3px] border-stone-100 border-t-indigo-500 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow">
-              24%
+            <div className={cn(
+              "w-10 h-10 rounded-full border-[3px] border-stone-100 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow",
+              dtiRatio < 30 ? "border-t-emerald-500" : dtiRatio <= 50 ? "border-t-orange-400" : "border-t-rose-500"
+            )}>
+              {dtiRatio}%
             </div>
           </div>
         </motion.div>
@@ -347,7 +419,7 @@ const containerVariants = {
             </div>
             <div>
               <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('income')}</p>
-              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{formatCurrency(12500000)}</p>
+              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{formatCurrency(totalIncome, family?.currency)}</p>
             </div>
           </div>
           <div 
@@ -359,7 +431,7 @@ const containerVariants = {
             </div>
             <div>
               <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('expenses')}</p>
-              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{formatCurrency(8450000)}</p>
+              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{formatCurrency(totalExpense, family?.currency)}</p>
             </div>
           </div>
         </motion.div>
@@ -677,9 +749,9 @@ const containerVariants = {
         isOpen={isHealthDetailOpen}
         onClose={() => setIsHealthDetailOpen(false)}
         initialTab={healthDetailTab}
-        healthScore={88}
-        dtiRatio={24}
-        totalMonthlyObligation={3095833}
+        healthScore={healthScore}
+        dtiRatio={dtiRatio}
+        totalMonthlyObligation={totalMonthlyObligation}
         onOpenDebtTracker={() => { setIsHealthDetailOpen(false); setIsDebtTrackerOpen(true); }}
         onOpenAiAdvisor={() => { setIsHealthDetailOpen(false); setIsAiAdvisorOpen(true); }}
       />
