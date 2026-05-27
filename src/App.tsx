@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Dashboard from './views/Dashboard';
@@ -160,10 +160,18 @@ function AppContent() {
 
 export default function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <AppContent />
-      </AuthProvider>
-    </Router>
+    <Suspense fallback={
+      <div className="min-h-screen bg-[#fdfcfb] flex items-center justify-center">
+        <div className="w-12 h-12 bg-stone-900 text-white rounded-2xl flex items-center justify-center shadow-xl shadow-stone-200 animate-pulse rotate-3">
+          <span className="font-serif italic font-black text-xl">N</span>
+        </div>
+      </div>
+    }>
+      <Router>
+        <AuthProvider>
+          <AppContent />
+        </AuthProvider>
+      </Router>
+    </Suspense>
   );
 }
