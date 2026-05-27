@@ -44,8 +44,10 @@ import { HealthDetailModal } from '../components/HealthDetailModal';
 export default function Dashboard() {
   const { user, profile, logout } = useAuth();
   const { t, i18n } = useTranslation();
+  const isId = i18n.language?.startsWith('id');
   const [family, setFamily] = useState<any>(null);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isTxFormOpen, setIsTxFormOpen] = useState(false);
   const [isKidsModalOpen, setIsKidsModalOpen] = useState(false);
