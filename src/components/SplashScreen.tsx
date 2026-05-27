@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
 
 export function SplashScreen({ onComplete }: { onComplete: () => void }) {
-  const { t, i18n } = useTranslation();
   const [progress, setProgress] = useState(0);
 
-  const isId = i18n.language?.startsWith('id');
+  // Ultra-safe synchronous browser-level language detection bypassing React i18n Suspense boundaries
+  const isId = typeof navigator !== 'undefined' && (
+    navigator.language?.startsWith('id') || 
+    (navigator.languages && navigator.languages.some(l => l.startsWith('id')))
+  );
 
   // Increment percentage smooth-loading simulation (Tokopedia-style)
   useEffect(() => {
@@ -21,7 +23,7 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
         const step = prev < 30 ? 3 : prev < 75 ? 2 : 1;
         return Math.min(100, prev + step);
       });
-    }, 30); // ~2.2 seconds complete lifecycle
+    }, 28); // ~2 seconds complete lifecycle
     return () => clearInterval(interval);
   }, []);
 
@@ -30,7 +32,7 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
     if (progress === 100) {
       const delay = setTimeout(() => {
         onComplete();
-      }, 500);
+      }, 400);
       return () => clearTimeout(delay);
     }
   }, [progress, onComplete]);
@@ -39,7 +41,7 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
     <motion.div 
       initial={{ opacity: 1 }}
       exit={{ opacity: 0, scale: 1.05, filter: 'blur(8px)' }}
-      transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
+      transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
       className="fixed inset-0 z-[9999] bg-[#fdfcfb] flex flex-col items-center justify-between p-12 overflow-hidden text-stone-900"
     >
       {/* Animated Pastels in Background */}
@@ -76,15 +78,15 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
           <motion.h1 
             initial={{ opacity: 0, y: 10 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
+            transition={{ delay: 0.3 }}
             className="text-5xl font-brand font-bold tracking-tight text-stone-900"
           >
-            {t('app_name')}
+            Nemu
           </motion.h1>
           <motion.p 
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            transition={{ delay: 0.6 }}
+            transition={{ delay: 0.5 }}
             className="text-stone-400 text-xs font-semibold uppercase tracking-[0.25em]"
           >
             {isId ? 'Harmoni Keuangan Keluarga' : 'Family Financial Harmony'}
@@ -121,7 +123,7 @@ export function SplashScreen({ onComplete }: { onComplete: () => void }) {
         <motion.div 
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.6 }}
-          transition={{ delay: 0.8 }}
+          transition={{ delay: 0.7 }}
           className="text-center space-y-1"
         >
           <p className="text-[9px] font-bold text-stone-300 uppercase tracking-[0.4em] select-none">
