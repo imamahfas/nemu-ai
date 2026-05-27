@@ -20,44 +20,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      setUser(user);
-      if (user) {
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          setProfile(userDoc.data());
-        } else {
-          // New user setup
-          const defaultProfile = {
-            uid: user.uid,
-            email: user.email,
-            displayName: user.displayName,
-            photoURL: user.photoURL,
-            role: 'parent', // Default role
-            familyId: user.uid, // Default family is self
-            createdAt: new Date().toISOString(),
-          };
-          await setDoc(doc(db, 'users', user.uid), defaultProfile);
-          
-          // Generate a simple 6-char alphanumeric invite code
-          const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      try {
+        setUser(user);
+        if (user) {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            setProfile(userDoc.data());
+          } else {
+            // New user setup
+            const defaultProfile = {
+              uid: user.uid,
+              email: user.email || '',
+              displayName: user.displayName || 'Nemu User',
+              photoURL: user.photoURL || '',
+              role: 'parent', // Default role
+              familyId: user.uid, // Default family is self
+              createdAt: new Date().toISOString(),
+            };
+            await setDoc(doc(db, 'users', user.uid), defaultProfile);
+            
+            // Generate a simple 6-char alphanumeric invite code
+            const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
 
-          // Initialize family
-          await setDoc(doc(db, 'families', user.uid), {
-            name: `${user.displayName}'s Space`,
-            totalBalance: 0,
-            currency: 'IDR',
-            members: [user.uid],
-            spaceType: 'personal', // Default mode
-            inviteCode: inviteCode,
-            updatedAt: new Date().toISOString(),
-          });
-          
-          setProfile(defaultProfile);
+            // Initialize family
+            await setDoc(doc(db, 'families', user.uid), {
+              name: `${user.displayName || 'Family'}'s Space`,
+              totalBalance: 0,
+              currency: 'IDR',
+              members: [user.uid],
+              spaceType: 'personal', // Default mode
+              inviteCode: inviteCode,
+              updatedAt: new Date().toISOString(),
+            });
+            
+            setProfile(defaultProfile);
+          }
+        } else {
+          setProfile(null);
         }
-      } else {
-        setProfile(null);
+      } catch (error) {
+        console.error("Auth change error captured safely:", error);
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return unsubscribe;
