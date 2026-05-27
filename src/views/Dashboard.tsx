@@ -12,7 +12,10 @@ import {
   LogOut,
   Target,
   Sparkles,
-  Languages
+  Languages,
+  Compass,
+  Users,
+  BarChart2
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,6 +33,13 @@ import { FamilyGoalsModal } from '../components/FamilyGoalsModal';
 import { SettingsModal } from '../components/SettingsModal';
 import { claimTask } from '../lib/kidsService';
 import { generateFinancialAdvice } from '../lib/aiCoach';
+import { AIAdvisorModal } from '../components/AIAdvisorModal';
+import { DebtTrackerModal } from '../components/DebtTrackerModal';
+import { CreditSimulatorModal } from '../components/CreditSimulatorModal';
+import { RoadmapModal } from '../components/RoadmapModal';
+import { CommunityModal } from '../components/CommunityModal';
+import { FirestoreSchema } from '../lib/firestoreSchema';
+import { HealthDetailModal } from '../components/HealthDetailModal';
 
 export default function Dashboard() {
   const { user, profile, logout } = useAuth();
@@ -41,6 +51,7 @@ export default function Dashboard() {
   const [isKidsModalOpen, setIsKidsModalOpen] = useState(false);
   const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyFilterType, setHistoryFilterType] = useState<'income' | 'expense' | 'all'>('all');
   const [isGoalsOpen, setIsGoalsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [scannerData, setScannerData] = useState<any>(null);
@@ -53,6 +64,30 @@ export default function Dashboard() {
   const [savingGoals, setSavingGoals] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Premium suite modal state flags
+  const [isAiAdvisorOpen, setIsAiAdvisorOpen] = useState(false);
+  const [isDebtTrackerOpen, setIsDebtTrackerOpen] = useState(false);
+  const [isCreditSimOpen, setIsCreditSimOpen] = useState(false);
+  const [isRoadmapOpen, setIsRoadmapOpen] = useState(false);
+  const [isCommunityOpen, setIsCommunityOpen] = useState(false);
+  
+  // Financial Health and DTI details state
+  const [isHealthDetailOpen, setIsHealthDetailOpen] = useState(false);
+  const [healthDetailTab, setHealthDetailTab] = useState<'health' | 'dti'>('health');
+
+  const handleRepay = async (amount: number, description: string) => {
+    if (!profile?.familyId || !user) return;
+    await FirestoreSchema.addTransaction({
+      userId: user.uid,
+      familyId: profile.familyId,
+      amount,
+      type: 'expense',
+      category: 'Savings',
+      description,
+      date: new Date().toISOString()
+    });
+  };
+
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'id' ? 'en' : 'id');
   };
@@ -60,7 +95,7 @@ export default function Dashboard() {
   const loadAiAdvice = async () => {
     if (isGeneratingAdvice) return;
     setIsGeneratingAdvice(true);
-    const advice = await generateFinancialAdvice(recentTransactions, i18n.language);
+    const advice = await generateFinancialAdvice(recentTransactions, i18n.language, family?.spaceType || 'personal');
     setAiAdvice(advice);
     setIsGeneratingAdvice(false);
   };
@@ -85,7 +120,7 @@ export default function Dashboard() {
       collection(db, txPath),
       where('familyId', '==', profile.familyId),
       orderBy('date', 'desc'),
-      limit(5)
+      limit(100)
     );
     const unsubTransactions = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -134,7 +169,7 @@ const containerVariants = {
     }
   };
 
-  const isMarried = family?.spaceType !== 'unmarried';
+  const isMarried = family?.spaceType === 'married';
   const isChild = profile?.role === 'child';
 
   if (loading) return (
@@ -145,7 +180,7 @@ const containerVariants = {
           <span className="font-serif italic font-black text-xs text-orange-400">N</span>
         </div>
       </div>
-      <p className="text-stone-300 text-[10px] font-bold uppercase tracking-[0.2em] animate-pulse">Synchronizing Family Ledger</p>
+      <p className="text-stone-300 text-[10px] font-bold uppercase tracking-[0.2em] animate-pulse">Synchronizing Financial Ledger</p>
     </div>
   );
 
@@ -202,13 +237,19 @@ const containerVariants = {
             <div className="flex justify-between items-start relative z-10">
               <div className="space-y-1">
                 <p className="text-stone-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                  <LayoutDashboard size={12} /> {isMarried ? t('shared_balance') : 'Joint Balance'}
+                  <LayoutDashboard size={12} /> {
+                    family?.spaceType === 'personal' 
+                      ? t('personal_balance') 
+                      : family?.spaceType === 'unmarried' 
+                        ? t('joint_balance') 
+                        : t('shared_balance')
+                  }
                 </p>
                 <h2 className="text-5xl font-brand font-bold tracking-tight text-white py-2">
                   {formatCurrency(family?.totalBalance || 0, family?.currency)}
                 </h2>
                 <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium bg-emerald-400/10 w-max px-3 py-1 rounded-full">
-                  <TrendingUp size={12} /> +2.4% vs Last month
+                  <TrendingUp size={12} /> +2.4% {t('vs_last_month')}
                 </div>
               </div>
               <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 rotate-12">
@@ -233,6 +274,36 @@ const containerVariants = {
           </div>
         </motion.div>
 
+        {/* Premium Wealth Indicators */}
+        <motion.div variants={itemVariants} className="grid grid-cols-2 gap-4">
+          <div 
+            onClick={() => { setHealthDetailTab('health'); setIsHealthDetailOpen(true); }}
+            className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all active:scale-[0.99] group"
+          >
+            <div className="space-y-1">
+              <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('financial_health')}</span>
+              <h4 className="text-xl font-brand font-bold text-stone-800">88 / 100</h4>
+              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase">{t('excellent')}</span>
+            </div>
+            <div className="w-10 h-10 rounded-full border-[3px] border-stone-100 border-t-emerald-500 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow">
+              88%
+            </div>
+          </div>
+          <div 
+            onClick={() => { setHealthDetailTab('dti'); setIsHealthDetailOpen(true); }}
+            className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all active:scale-[0.99] group"
+          >
+            <div className="space-y-1">
+              <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('debt_to_income')}</span>
+              <h4 className="text-xl font-brand font-bold text-stone-800">24% {t('ratio')}</h4>
+              <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-2.5 py-0.5 rounded-full uppercase">{t('healthy_limit')}</span>
+            </div>
+            <div className="w-10 h-10 rounded-full border-[3px] border-stone-100 border-t-indigo-500 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow">
+              24%
+            </div>
+          </div>
+        </motion.div>
+
         {/* AI Insight Card - Elevated Design */}
         <motion.section variants={itemVariants} className="relative group">
           <div className="absolute inset-0 bg-orange-400 blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
@@ -245,7 +316,7 @@ const containerVariants = {
                 </div>
                 <div>
                   <h3 className="font-brand font-bold text-stone-800 tracking-tight">{t('financial_coach')}</h3>
-                  <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">Real-time Analysis</p>
+                  <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">{i18n.language.startsWith('id') ? 'Analisis Real-time' : 'Real-time Analysis'}</p>
                 </div>
               </div>
               <button 
@@ -253,7 +324,7 @@ const containerVariants = {
                 disabled={isGeneratingAdvice}
                 className="text-[10px] bg-stone-50 text-stone-400 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors disabled:opacity-50"
               >
-                {isGeneratingAdvice ? 'Thinking...' : 'Analyze'}
+                {isGeneratingAdvice ? (i18n.language.startsWith('id') ? 'Berpikir...' : 'Thinking...') : (i18n.language.startsWith('id') ? 'Analisis' : 'Analyze')}
               </button>
             </div>
             <p className="text-stone-600 text-sm leading-relaxed font-medium italic">
@@ -267,18 +338,24 @@ const containerVariants = {
 
         {/* Bento Grid Quick Stats */}
         <motion.div variants={itemVariants} className="grid grid-cols-2 gap-5">
-          <div className="bg-white p-6 rounded-[2.5rem] border border-stone-100 space-y-4 shadow-sm hover:shadow-md transition-shadow group">
+          <div 
+            onClick={() => { setHistoryFilterType('income'); setIsHistoryOpen(true); }}
+            className="bg-white p-6 rounded-[2.5rem] border border-stone-100 space-y-4 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all active:scale-[0.99] cursor-pointer group"
+          >
             <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
-              <TrendingUp size={22} />
+              <TrendingDown size={22} />
             </div>
             <div>
               <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('income')}</p>
               <p className="text-xl font-brand font-bold text-stone-800 mt-1">{formatCurrency(12500000)}</p>
             </div>
           </div>
-          <div className="bg-white p-6 rounded-[2.5rem] border border-stone-100 space-y-4 shadow-sm hover:shadow-md transition-shadow group">
+          <div 
+            onClick={() => { setHistoryFilterType('expense'); setIsHistoryOpen(true); }}
+            className="bg-white p-6 rounded-[2.5rem] border border-stone-100 space-y-4 shadow-sm hover:shadow-md hover:border-rose-300 transition-all active:scale-[0.99] cursor-pointer group"
+          >
             <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
-              <TrendingDown size={22} />
+              <TrendingUp size={22} />
             </div>
             <div>
               <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('expenses')}</p>
@@ -287,19 +364,89 @@ const containerVariants = {
           </div>
         </motion.div>
 
+        {/* Premium AI Financial Suite */}
+        <motion.section variants={itemVariants} className="space-y-4">
+          <div>
+            <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{t('premium_suite')}</h3>
+            <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{t('advanced_features')}</p>
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <button 
+              onClick={() => setIsAiAdvisorOpen(true)}
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98"
+            >
+              <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-indigo-50/50 rounded-full group-hover:scale-110 transition-transform" />
+              <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 w-max"><Sparkles size={18} /></div>
+              <div>
+                <h4 className="font-bold text-stone-800 text-xs">{t('ai_advisor')}</h4>
+                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('empathetic_advisor')}</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => setIsDebtTrackerOpen(true)}
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-rose-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98"
+            >
+              <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-rose-50/50 rounded-full group-hover:scale-110 transition-transform" />
+              <div className="p-3 bg-rose-50 rounded-2xl text-rose-600 w-max"><TrendingDown size={18} /></div>
+              <div>
+                <h4 className="font-bold text-stone-800 text-xs">{t('debt_tracker')}</h4>
+                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('fixed_floating_loans')}</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => setIsCreditSimOpen(true)}
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-emerald-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98"
+            >
+              <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-emerald-50/50 rounded-full group-hover:scale-110 transition-transform" />
+              <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 w-max"><BarChart2 size={18} /></div>
+              <div>
+                <h4 className="font-bold text-stone-800 text-xs">{t('credit_simulator')}</h4>
+                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('kpr_vehicle_loans')}</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => setIsRoadmapOpen(true)}
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-amber-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98"
+            >
+              <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-amber-50/50 rounded-full group-hover:scale-110 transition-transform" />
+              <div className="p-3 bg-amber-50 rounded-2xl text-amber-600 w-max"><Compass size={18} /></div>
+              <div>
+                <h4 className="font-bold text-stone-800 text-xs">{t('roadmap')}</h4>
+                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('emergency_wealth_goals')}</p>
+              </div>
+            </button>
+
+            <button 
+              onClick={() => setIsCommunityOpen(true)}
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden col-span-2 group active:scale-98"
+            >
+              <div className="absolute -right-8 -bottom-8 w-24 h-24 bg-indigo-50/50 rounded-full group-hover:scale-110 transition-transform" />
+              <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 w-max"><Users size={18} /></div>
+              <div>
+                <h4 className="font-bold text-stone-800 text-xs">{t('community')}</h4>
+                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('share_wisdom_interact')}</p>
+              </div>
+            </button>
+          </div>
+        </motion.section>
+
         {/* Dynamic Activity Feed */}
         <motion.section variants={itemVariants} className="space-y-5">
           <div className="flex justify-between items-center px-2">
             <div>
               <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{t('recent_activity')}</h3>
-              <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">Live Feed</p>
+              <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{t('live_feed')}</p>
             </div>
-            <button onClick={() => setIsHistoryOpen(true)} className="text-xs text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full transition-all">
+            <button onClick={() => { setHistoryFilterType('all'); setIsHistoryOpen(true); }} className="text-xs text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full transition-all">
               {t('view_all')}
             </button>
           </div>
           <div className="grid gap-4">
-            {recentTransactions.map((tx, idx) => (
+            {recentTransactions.slice(0, 5).map((tx, idx) => (
               <motion.div 
                 key={tx.id} 
                 initial={{ opacity: 0, x: -10 }}
@@ -350,7 +497,7 @@ const containerVariants = {
               </div>
               <div>
                 <h3 className="font-brand font-bold text-stone-800 tracking-tight">{t('kids_kit')}</h3>
-                <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest">Financial Education</p>
+                <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest">{t('financial_education')}</p>
               </div>
             </div>
           </div>
@@ -363,7 +510,7 @@ const containerVariants = {
                     <Target size={24} />
                   </div>
                   <div className="text-right">
-                    <span className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Status</span>
+                    <span className="block text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">{t('status')}</span>
                     <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full">
                       {kidWallets.length > 0 ? Math.min(100, Math.round((kidWallets[0].balance / goal.targetAmount) * 100)) : 0}%
                     </span>
@@ -371,7 +518,7 @@ const containerVariants = {
                 </div>
                 <div>
                   <p className="font-bold text-stone-800 leading-tight">{goal.title}</p>
-                  <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-widest">Savings Goal</p>
+                  <p className="text-[10px] font-bold text-stone-400 mt-1 uppercase tracking-widest">{t('savings_goal')}</p>
                 </div>
                 <div className="w-full bg-stone-50 h-2.5 rounded-full overflow-hidden shadow-inner p-0.5">
                   <div 
@@ -386,7 +533,7 @@ const containerVariants = {
               <div key={task.id} className="flex-shrink-0 bg-white p-6 rounded-[2.5rem] border border-emerald-50 w-52 space-y-4 shadow-sm snap-center hover:scale-105 transition-transform cursor-pointer">
                 <div className="bg-orange-50 w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner border border-orange-100">💰</div>
                 <div>
-                  <p className="font-bold text-stone-800">Task</p>
+                  <p className="font-bold text-stone-800">{t('task')}</p>
                   <div className="flex items-center gap-2 mt-1">
                     <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest truncate max-w-[80px]">{task.title}</span>
                     <span className="w-1 h-1 rounded-full bg-stone-300 flex-shrink-0" />
@@ -409,8 +556,8 @@ const containerVariants = {
             
             {savingGoals.length === 0 && tasks.length === 0 && (
               <div className="flex-shrink-0 bg-white/50 p-6 rounded-[2.5rem] border border-dashed border-emerald-200 w-52 flex flex-col items-center justify-center text-center">
-                 <p className="text-xs font-bold text-emerald-600 mb-2">No Goals or Tasks</p>
-                 <p className="text-[10px] text-stone-400 font-medium">Tap the Baby icon below to add kids and tasks!</p>
+                 <p className="text-xs font-bold text-emerald-600 mb-2">{t('no_goals_or_tasks')}</p>
+                 <p className="text-[10px] text-stone-400 font-medium">{t('add_kids_tasks_prompt')}</p>
               </div>
               )}
             </div>
@@ -476,6 +623,7 @@ const containerVariants = {
         isOpen={isHistoryOpen}
         onClose={() => setIsHistoryOpen(false)}
         familyId={profile?.familyId || ''}
+        filterType={historyFilterType}
       />
 
       <FamilyGoalsModal
@@ -483,13 +631,57 @@ const containerVariants = {
         onClose={() => setIsGoalsOpen(false)}
         familyId={profile?.familyId || ''}
         totalBalance={family?.totalBalance || 0}
-        spaceType={family?.spaceType || 'married'}
+        spaceType={family?.spaceType || 'personal'}
+        userId={user?.uid || ''}
       />
 
       <SettingsModal 
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         family={family}
+      />
+
+      <AIAdvisorModal 
+        isOpen={isAiAdvisorOpen}
+        onClose={() => setIsAiAdvisorOpen(false)}
+        transactions={recentTransactions}
+        spaceType={family?.spaceType || 'personal'}
+      />
+
+      <DebtTrackerModal
+        isOpen={isDebtTrackerOpen}
+        onClose={() => setIsDebtTrackerOpen(false)}
+        totalBalance={family?.totalBalance || 0}
+        onRepay={handleRepay}
+        spaceType={family?.spaceType || 'personal'}
+      />
+
+      <CreditSimulatorModal
+        isOpen={isCreditSimOpen}
+        onClose={() => setIsCreditSimOpen(false)}
+      />
+
+      <RoadmapModal
+        isOpen={isRoadmapOpen}
+        onClose={() => setIsRoadmapOpen(false)}
+        totalBalance={family?.totalBalance || 0}
+      />
+
+      <CommunityModal
+        isOpen={isCommunityOpen}
+        onClose={() => setIsCommunityOpen(false)}
+        userProfile={profile}
+      />
+
+      <HealthDetailModal
+        isOpen={isHealthDetailOpen}
+        onClose={() => setIsHealthDetailOpen(false)}
+        initialTab={healthDetailTab}
+        healthScore={88}
+        dtiRatio={24}
+        totalMonthlyObligation={3095833}
+        onOpenDebtTracker={() => { setIsHealthDetailOpen(false); setIsDebtTrackerOpen(true); }}
+        onOpenAiAdvisor={() => { setIsHealthDetailOpen(false); setIsAiAdvisorOpen(true); }}
       />
     </div>
   );

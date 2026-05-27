@@ -51,8 +51,8 @@ export function InstallPWA() {
               <span className="font-serif italic font-black text-lg">N</span>
             </div>
             <div>
-              <p className="font-bold text-sm">Install Nemu App</p>
-              <p className="text-xs text-stone-400">For a better, faster experience.</p>
+              <p className="font-bold text-sm">{t('install_app_title')}</p>
+              <p className="text-xs text-stone-400">{t('install_app_desc')}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -60,7 +60,7 @@ export function InstallPWA() {
               onClick={handleInstallClick}
               className="bg-emerald-500 text-white px-4 py-2 rounded-xl text-xs font-bold active:scale-95 transition-transform flex items-center gap-2"
             >
-              <Download size={14} /> Install
+              <Download size={14} /> {t('install')}
             </button>
             <button onClick={() => setShowInstall(false)} className="p-2 text-stone-400 hover:text-white">
               <X size={16} />

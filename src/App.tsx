@@ -88,7 +88,7 @@ function LoginPage() {
             className="bg-white/80 p-5 rounded-[2rem] border border-stone-100 shadow-sm backdrop-blur-sm"
           >
             <Sparkles size={20} className="text-orange-400 mb-3 fill-orange-400/20" />
-            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">AI Powered</p>
+            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">{i18n.language.startsWith('id') ? 'Didukung AI' : 'AI Powered'}</p>
             <p className="text-xs font-bold text-stone-700 leading-tight">{t('smart_scanning')}</p>
           </motion.div>
           <motion.div 
@@ -99,7 +99,7 @@ function LoginPage() {
               <div className="w-2.5 h-2.5 rounded-full bg-orange-400 shadow-sm shadow-orange-200" />
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-200" />
             </div>
-            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">Collaborative</p>
+            <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest mb-1">{i18n.language.startsWith('id') ? 'Kolaboratif' : 'Collaborative'}</p>
             <p className="text-xs font-bold text-stone-700 leading-tight">{t('shared_wallets')}</p>
           </motion.div>
         </div>
@@ -116,7 +116,7 @@ function LoginPage() {
           <div className="flex items-center justify-center gap-4">
             <div className="h-[1px] flex-1 bg-stone-100" />
             <p className="text-[10px] text-stone-300 uppercase tracking-[0.3em] font-bold">
-              Winner Material
+              {i18n.language.startsWith('id') ? 'Kualitas Premium' : 'Premium Quality'}
             </p>
             <div className="h-[1px] flex-1 bg-stone-100" />
           </div>

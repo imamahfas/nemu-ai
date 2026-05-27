@@ -47,7 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             totalBalance: 0,
             currency: 'IDR',
             members: [user.uid],
-            spaceType: 'married', // Default mode
+            spaceType: 'personal', // Default mode
             inviteCode: inviteCode,
             updatedAt: new Date().toISOString(),
           });

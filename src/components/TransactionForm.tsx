@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, TrendingUp, TrendingDown, Store, Tag } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { addTransaction, TransactionData } from '../lib/transactionService';
+import { formatNumberInput } from '../lib/utils';
 
 interface TransactionFormProps {
   isOpen: boolean;
@@ -17,7 +18,7 @@ const CATEGORIES = [
 ];
 
 export function TransactionForm({ isOpen, onClose, userId, familyId, initialData }: TransactionFormProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
@@ -66,7 +67,7 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
       await addTransaction(userId, familyId, data);
       onClose();
     } catch (error) {
-      alert("Failed to save transaction.");
+      alert(i18n.language.startsWith('id') ? "Gagal menyimpan transaksi." : "Failed to save transaction.");
       console.error(error);
     } finally {
       setIsSubmitting(false);
@@ -114,7 +115,7 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
                     type === 'expense' ? 'bg-white text-rose-600 shadow-sm' : 'text-stone-500'
                   }`}
                 >
-                  <TrendingDown size={16} /> {t('expense')}
+                  <TrendingUp size={16} /> {t('expense')}
                 </button>
                 <button
                   type="button"
@@ -123,7 +124,7 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
                     type === 'income' ? 'bg-white text-emerald-600 shadow-sm' : 'text-stone-500'
                   }`}
                 >
-                  <TrendingUp size={16} /> {t('income')}
+                  <TrendingDown size={16} /> {t('income')}
                 </button>
               </div>
 
@@ -133,9 +134,9 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400 font-bold">Rp</span>
                   <input 
-                    type="number" 
-                    value={amount}
-                    onChange={(e) => setAmount(e.target.value)}
+                    type="text" 
+                    value={formatNumberInput(amount)}
+                    onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
                     placeholder="0"
                     required
                     className="w-full bg-stone-50 border border-stone-100 text-stone-900 rounded-2xl py-4 pl-12 pr-4 font-brand font-bold text-xl focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400 transition-all"
@@ -153,7 +154,7 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
                       type="text" 
                       value={description}
                       onChange={(e) => setDescription(e.target.value)}
-                      placeholder="Groceries, Salary..."
+                      placeholder={i18n.language.startsWith('id') ? "Belanja, Gaji..." : "Groceries, Salary..."}
                       required
                       className="w-full bg-stone-50 border border-stone-100 text-stone-900 rounded-2xl py-3 pl-11 pr-4 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400 transition-all"
                     />
@@ -169,7 +170,22 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
                       onChange={(e) => setCategory(e.target.value)}
                       className="w-full bg-stone-50 border border-stone-100 text-stone-900 rounded-2xl py-3 pl-11 pr-4 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-orange-400/20 focus:border-orange-400 transition-all appearance-none"
                     >
-                      {CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      {CATEGORIES.map(cat => {
+                        const translateCategory = (c: string) => {
+                          switch (c) {
+                            case 'Food': return i18n.language.startsWith('id') ? 'Makanan' : 'Food';
+                            case 'Transport': return i18n.language.startsWith('id') ? 'Transportasi' : 'Transport';
+                            case 'Utilities': return i18n.language.startsWith('id') ? 'Tagihan/Utilitas' : 'Utilities';
+                            case 'Entertainment': return i18n.language.startsWith('id') ? 'Hiburan' : 'Entertainment';
+                            case 'Shopping': return i18n.language.startsWith('id') ? 'Belanja' : 'Shopping';
+                            case 'Health': return i18n.language.startsWith('id') ? 'Kesehatan' : 'Health';
+                            case 'Education': return i18n.language.startsWith('id') ? 'Pendidikan' : 'Education';
+                            case 'Other': return i18n.language.startsWith('id') ? 'Lainnya' : 'Other';
+                            default: return c;
+                          }
+                        };
+                        return <option key={cat} value={cat}>{translateCategory(cat)}</option>;
+                      })}
                     </select>
                   </div>
                 </div>

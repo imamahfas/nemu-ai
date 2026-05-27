@@ -9,6 +9,8 @@
   --radius-3xl: 1.5rem;
   --radius-4xl: 2rem;
   --radius-5xl: 2.5rem;
+  
+  --animate-spin-slow: spin 8s linear infinite;
 }
 
 @layer base {
