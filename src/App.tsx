@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Dashboard from './views/Dashboard';
 import { InstallPWA } from './components/InstallPWA';
 import { LogIn, Sparkles, Languages } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion } from 'motion/react';
 import { useTranslation } from 'react-i18next';
 import { SplashScreen } from './components/SplashScreen';
 
@@ -133,14 +133,12 @@ function AppContent() {
 
   return (
     <>
-      <AnimatePresence mode="wait">
-        {showSplash && (
-          <SplashScreen 
-            authLoading={authLoading} 
-            onComplete={() => setShowSplash(false)} 
-          />
-        )}
-      </AnimatePresence>
+      {showSplash && (
+        <SplashScreen 
+          authLoading={authLoading} 
+          onComplete={() => setShowSplash(false)} 
+        />
+      )}
 
       <InstallPWA />
       <Routes>
