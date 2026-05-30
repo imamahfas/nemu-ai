@@ -15,12 +15,15 @@ import {
   Languages,
   Compass,
   Users,
-  BarChart2
+  BarChart2,
+  X,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { doc, onSnapshot, collection, query, where, limit, orderBy } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, limit, orderBy, updateDoc } from 'firebase/firestore';
 import { formatCurrency, cn } from '../lib/utils';
 import { CameraScanner } from '../components/CameraScanner';
 import { useTranslation } from 'react-i18next';
@@ -42,7 +45,7 @@ import { FirestoreSchema } from '../lib/firestoreSchema';
 import { HealthDetailModal } from '../components/HealthDetailModal';
 
 export default function Dashboard() {
-  const { user, profile, logout } = useAuth();
+  const { user, profile, loading: authLoading, logout } = useAuth();
   const { t, i18n } = useTranslation();
   const isId = i18n.language?.startsWith('id');
   const [family, setFamily] = useState<any>(null);
@@ -77,17 +80,33 @@ export default function Dashboard() {
   const [isHealthDetailOpen, setIsHealthDetailOpen] = useState(false);
   const [healthDetailTab, setHealthDetailTab] = useState<'health' | 'dti'>('health');
 
-  // Sync dashboard debts dynamically from localStorage
+  // Sync dashboard debts dynamically from Firestore
   const [dashboardDebts, setDashboardDebts] = useState<any[]>([]);
+  const [hideBalances, setHideBalances] = useState(true);
 
   useEffect(() => {
-    if (family?.spaceType) {
-      const saved = localStorage.getItem(`nemu_debts_${family.spaceType}`);
-      setDashboardDebts(saved ? JSON.parse(saved) : []);
-    } else {
+    if (!profile?.familyId) {
       setDashboardDebts([]);
+      return;
     }
-  }, [family?.spaceType, isDebtTrackerOpen]);
+
+    const q = query(
+      collection(db, 'debts'),
+      where('familyId', '==', profile.familyId)
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const loadedDebts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setDashboardDebts(loadedDebts);
+    }, (error) => {
+      console.error("Dashboard error loading debts from Firestore:", error);
+    });
+
+    return unsub;
+  }, [profile?.familyId]);
 
   // Derived Cash Flow Metrics
   const totalIncome = recentTransactions
@@ -112,6 +131,33 @@ export default function Dashboard() {
 
   const monthlyIncome = totalIncome > 0 ? totalIncome : 12500000;
   const dtiRatio = totalMonthlyObligation > 0 ? Math.round((totalMonthlyObligation / monthlyIncome) * 100) : 0;
+
+  // Derived Category Spending MTD for current calendar month
+  const categorySpentMtd = (() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+
+    const spentMap: Record<string, number> = {
+      Food: 0,
+      Transport: 0,
+      Shopping: 0,
+      Savings: 0
+    };
+
+    recentTransactions.forEach(tx => {
+      if (tx.type !== 'expense') return;
+      const txDate = new Date(tx.date);
+      if (txDate.getFullYear() === currentYear && txDate.getMonth() === currentMonth) {
+        spentMap[tx.category] = (spentMap[tx.category] || 0) + tx.amount;
+      }
+    });
+
+    return spentMap;
+  })();
+
+  const totalBudgetLimit: number = (Object.values(family?.budgetLimits || {}) as any[]).reduce((sum: number, lim: any) => sum + (parseFloat(lim) || 0), 0);
+  const isOverbudget = totalBudgetLimit > 0 && ((family?.totalBalance || 0) as number) < totalBudgetLimit;
 
   // Derived Health Score Engine
   const calculateHealthScore = () => {
@@ -153,49 +199,120 @@ export default function Dashboard() {
   const loadAiAdvice = async () => {
     if (isGeneratingAdvice) return;
     setIsGeneratingAdvice(true);
-    const advice = await generateFinancialAdvice(recentTransactions, i18n.language, family?.spaceType || 'personal');
+    const advice = await generateFinancialAdvice(
+      recentTransactions, 
+      i18n.language, 
+      family?.spaceType || 'personal',
+      family?.budgetLimits || {},
+      categorySpentMtd,
+      family?.currency || 'IDR'
+    );
     setAiAdvice(advice);
     setIsGeneratingAdvice(false);
   };
 
   useEffect(() => {
-    if (!profile?.familyId) return;
+    if (recentTransactions.length > 0 && !aiAdvice) {
+      loadAiAdvice();
+    }
+  }, [recentTransactions, aiAdvice]);
+
+  useEffect(() => {
+    if (authLoading) return;
+    if (!profile?.familyId) {
+      setLoading(false);
+      return;
+    }
 
     // Listen to family data
     const familyPath = `families/${profile.familyId}`;
-    const unsubFamily = onSnapshot(doc(db, 'families', profile.familyId), (doc) => {
-      if (doc.exists()) {
-        setFamily(doc.data());
+    const unsubFamily = onSnapshot(doc(db, 'families', profile.familyId), async (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setFamily(data);
+        
+        // Auto-heal missing or mismatched spaceType field for backward compatibility with old family documents!
+        const isPersonal = profile.familyId.startsWith('personal_');
+        const isCouple = profile.familyId.startsWith('couple_');
+        const expectedSpaceType = isPersonal ? 'personal' : isCouple ? 'unmarried' : 'married';
+
+        if (data.spaceType !== expectedSpaceType) {
+          try {
+            await updateDoc(doc(db, 'families', profile.familyId), { spaceType: expectedSpaceType });
+            setFamily({ ...data, spaceType: expectedSpaceType });
+          } catch (err) {
+            console.error("Failed to auto-heal mismatched spaceType:", err);
+          }
+        }
+      } else {
+        // Automatically create the missing family space document on-the-fly to avoid null database states
+        console.log("Family space document is missing, auto-creating:", profile.familyId);
+        const isPersonal = profile.familyId.startsWith('personal_');
+        const isCouple = profile.familyId.startsWith('couple_');
+        const spaceType = isPersonal ? 'personal' : isCouple ? 'unmarried' : 'married';
+        const spaceName = isPersonal 
+          ? `${profile.displayName || user?.displayName || 'My'} Personal Space`
+          : isCouple 
+            ? `${profile.displayName || user?.displayName || 'Our'} Couple Space`
+            : `${profile.displayName || user?.displayName || 'Our'} Family Space`;
+        
+        const newFamily = {
+          name: spaceName,
+          totalBalance: 0,
+          currency: 'IDR',
+          members: [user?.uid].filter(Boolean),
+          spaceType,
+          inviteCode: (isPersonal ? 'P-' : isCouple ? 'C-' : 'F-') + Math.random().toString(36).substring(2, 8).toUpperCase(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        try {
+          await setDoc(doc(db, 'families', profile.familyId), newFamily);
+          setFamily(newFamily);
+        } catch (err) {
+          console.error("Failed to auto-create missing family space:", err);
+        }
       }
       setLoading(false);
     }, (error) => {
+      console.error("Dashboard error loading family:", error);
       handleFirestoreError(error, OperationType.GET, familyPath);
+      setLoading(false);
     });
 
     // Listen to recent transactions
+    // Sort transactions on client side to prevent needing a composite index (familyId, date) in Firestore
     const txPath = 'transactions';
     const q = query(
       collection(db, txPath),
       where('familyId', '==', profile.familyId),
-      orderBy('date', 'desc'),
       limit(100)
     );
     const unsubTransactions = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      docs.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setRecentTransactions(docs);
     }, (error) => {
+      console.error("Dashboard error loading transactions:", error);
       handleFirestoreError(error, OperationType.LIST, txPath);
+      setLoading(false);
     });
 
     // Listen to kids data
     const unsubKidWallets = onSnapshot(query(collection(db, 'kidWallets'), where('familyId', '==', profile.familyId)), snapshot => {
       setKidWallets(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Dashboard error loading kidWallets:", error);
     });
     const unsubTasks = onSnapshot(query(collection(db, 'tasks'), where('familyId', '==', profile.familyId)), snapshot => {
       setTasks(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Dashboard error loading tasks:", error);
     });
     const unsubGoals = onSnapshot(query(collection(db, 'savingGoals'), where('familyId', '==', profile.familyId)), snapshot => {
       setSavingGoals(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      console.error("Dashboard error loading savingGoals:", error);
     });
 
     return () => {
@@ -205,7 +322,7 @@ export default function Dashboard() {
       unsubTasks();
       unsubGoals();
     };
-  }, [profile?.familyId]);
+  }, [profile?.familyId, authLoading]);
 
 const containerVariants = {
     hidden: { opacity: 0 },
@@ -223,11 +340,11 @@ const containerVariants = {
     visible: { 
       opacity: 1, 
       y: 0,
-      transition: { type: 'spring', stiffness: 100, damping: 15 }
+      transition: { type: 'spring' as const, stiffness: 100, damping: 15 }
     }
   };
 
-  const isMarried = family?.spaceType === 'married';
+  const isMarried = family?.spaceType === 'married' || profile?.familyId?.startsWith('family_');
   const isChild = profile?.role === 'child';
 
   if (loading) return (
@@ -257,22 +374,31 @@ const containerVariants = {
         </div>
         <div className="flex items-center gap-3">
           <button 
+            id="btn-toggle-language"
+            aria-label="Ubah bahasa / Switch language"
             onClick={toggleLanguage}
-            className="p-2.5 text-stone-500 hover:bg-stone-50 rounded-2xl flex items-center gap-2 border border-stone-100 transition-all active:scale-95"
+            className="p-2.5 text-stone-500 hover:bg-stone-50 rounded-2xl flex items-center gap-2 border border-stone-100 transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
           >
             <Languages size={18} />
             <span className="text-xs font-bold uppercase tracking-tight">{i18n.language}</span>
           </button>
           <div className="relative group">
             <img 
+              id="btn-profile-settings"
+              role="button"
+              tabIndex={0}
+              aria-label="Buka Pengaturan Profil / Open Profile Settings"
               onClick={() => setIsSettingsOpen(true)}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsSettingsOpen(true); }}
               src={user?.photoURL || ''} 
               alt="Profile" 
-              className="w-11 h-11 rounded-2xl border-2 border-stone-100 shadow-sm cursor-pointer transition-transform group-hover:scale-105" 
+              className="w-11 h-11 rounded-2xl border-2 border-stone-100 shadow-sm cursor-pointer transition-transform group-hover:scale-105 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none" 
             />
             <button 
+              id="btn-logout"
+              aria-label="Logout"
               onClick={logout}
-              className="absolute -top-1 -right-1 bg-white p-1 rounded-full border border-stone-100 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-rose-500"
+              className="absolute -top-1 -right-1 bg-white p-1 rounded-full border border-stone-100 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-rose-500 focus-visible:ring-2 focus-visible:ring-stone-900 focus:outline-none"
             >
               <LogOut size={12} />
             </button>
@@ -295,19 +421,38 @@ const containerVariants = {
             <div className="flex justify-between items-start relative z-10">
               <div className="space-y-1">
                 <p className="text-stone-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                  <LayoutDashboard size={12} /> {
-                    family?.spaceType === 'personal' 
-                      ? t('personal_balance') 
-                      : family?.spaceType === 'unmarried' 
-                        ? t('joint_balance') 
-                        : t('shared_balance')
-                  }
+                  <LayoutDashboard size={12} /> 
+                  <span>
+                    {family?.name || (
+                      family?.spaceType === 'personal' 
+                        ? t('personal_balance') 
+                        : family?.spaceType === 'unmarried' 
+                          ? t('joint_balance') 
+                          : t('shared_balance')
+                    )}
+                  </span>
                 </p>
-                <h2 className="text-5xl font-brand font-bold tracking-tight text-white py-2">
-                  {formatCurrency(family?.totalBalance || 0, family?.currency)}
-                </h2>
-                <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium bg-emerald-400/10 w-max px-3 py-1 rounded-full">
-                  <TrendingUp size={12} /> +2.4% {t('vs_last_month')}
+                <div className="flex items-center gap-3.5 py-1.5">
+                  <h2 className="text-5xl font-brand font-bold tracking-tight text-white leading-none">
+                    {hideBalances ? '••••••' : formatCurrency(family?.totalBalance || 0, family?.currency)}
+                  </h2>
+                  <button 
+                    onClick={() => setHideBalances(!hideBalances)}
+                    className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-stone-400 hover:text-white flex items-center justify-center active:scale-90"
+                    aria-label={hideBalances ? "Tampilkan saldo" : "Sembunyikan saldo"}
+                  >
+                    {hideBalances ? <Eye size={22} /> : <EyeOff size={22} />}
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium bg-emerald-400/10 w-max px-3 py-1 rounded-full">
+                    <TrendingUp size={12} /> +2.4% {t('vs_last_month')}
+                  </div>
+                  {isOverbudget && (
+                    <div className="flex items-center gap-1.5 text-rose-400 text-xs font-bold bg-rose-400/10 w-max px-3.5 py-1 rounded-full animate-pulse border border-rose-400/20">
+                      <span>⚠️</span> {isId ? 'Saldo Menipis (Overbudget)' : 'Low Balance (Overbudget)'}
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="bg-white/10 backdrop-blur-md p-3 rounded-2xl border border-white/10 rotate-12">
@@ -317,14 +462,17 @@ const containerVariants = {
 
             <div className="flex gap-4 relative z-10">
               <button 
+                id="btn-add-income"
                 onClick={() => { setScannerData(null); setIsTxFormOpen(true); }}
-                className="flex-1 h-14 bg-white text-stone-900 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-50 transition-all active:scale-95 shadow-lg shadow-black/20"
+                className="flex-1 h-14 bg-white text-stone-900 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-50 transition-all active:scale-95 shadow-lg shadow-black/20 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus:outline-none"
               >
                 <Plus size={20} /> {t('add_income')}
               </button>
               <button 
+                id="btn-scan-receipt"
+                aria-label="Scan struk belanja dengan kamera / Scan receipt with camera"
                 onClick={() => setIsScannerOpen(true)}
-                className="w-14 h-14 bg-stone-800 text-white rounded-2xl flex items-center justify-center border border-stone-700 hover:bg-stone-700 transition-all active:scale-95 shadow-lg"
+                className="w-14 h-14 bg-stone-800 text-white rounded-2xl flex items-center justify-center border border-stone-700 hover:bg-stone-700 transition-all active:scale-95 shadow-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus:outline-none"
               >
                 <Camera size={20} />
               </button>
@@ -335,8 +483,13 @@ const containerVariants = {
         {/* Premium Wealth Indicators */}
         <motion.div variants={itemVariants} className="grid grid-cols-2 gap-4">
           <div 
+            id="btn-health-score"
+            role="button"
+            tabIndex={0}
+            aria-label="Buka Detail Kesehatan Finansial / Open Financial Health Detail"
             onClick={() => { setHealthDetailTab('health'); setIsHealthDetailOpen(true); }}
-            className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all active:scale-[0.99] group"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setHealthDetailTab('health'); setIsHealthDetailOpen(true); } }}
+            className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all active:scale-[0.99] group focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
           >
             <div className="space-y-1">
               <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('financial_health')}</span>
@@ -356,8 +509,13 @@ const containerVariants = {
             </div>
           </div>
           <div 
+            id="btn-dti-ratio"
+            role="button"
+            tabIndex={0}
+            aria-label="Buka Detail Rasio Debt-to-Income / Open Debt-to-Income Ratio Detail"
             onClick={() => { setHealthDetailTab('dti'); setIsHealthDetailOpen(true); }}
-            className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all active:scale-[0.99] group"
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setHealthDetailTab('dti'); setIsHealthDetailOpen(true); } }}
+            className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all active:scale-[0.99] group focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
           >
             <div className="space-y-1">
               <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('debt_to_income')}</span>
@@ -421,7 +579,7 @@ const containerVariants = {
             </div>
             <div>
               <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('income')}</p>
-              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{formatCurrency(totalIncome, family?.currency)}</p>
+              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{hideBalances ? '••••••' : formatCurrency(totalIncome, family?.currency)}</p>
             </div>
           </div>
           <div 
@@ -433,10 +591,101 @@ const containerVariants = {
             </div>
             <div>
               <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('expenses')}</p>
-              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{formatCurrency(totalExpense, family?.currency)}</p>
+              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{hideBalances ? '••••••' : formatCurrency(totalExpense, family?.currency)}</p>
             </div>
           </div>
         </motion.div>
+
+        {/* Category Budget Caps Section */}
+        <motion.section variants={itemVariants} className="space-y-4">
+          <div className="flex justify-between items-center px-2">
+            <div>
+              <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{isId ? 'Anggaran Bulanan' : 'Monthly Budgets'}</h3>
+              <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{isId ? 'Pagu Kategori Aktif' : 'Active Category Caps'}</p>
+            </div>
+            <button 
+              id="btn-edit-budgets"
+              onClick={() => setIsSettingsOpen(true)}
+              className="text-[10px] text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-3.5 py-1.5 rounded-full transition-colors focus:outline-none"
+            >
+              {isId ? 'Atur Batas' : 'Set Limits'}
+            </button>
+          </div>
+
+          {family?.budgetLimits && Object.keys(family.budgetLimits).length > 0 ? (
+            <div className="grid gap-4 bg-white border border-stone-100 p-6 rounded-[2.5rem] shadow-sm relative overflow-hidden">
+              <div className="space-y-5">
+                {Object.entries(family.budgetLimits).map(([cat, limitVal]) => {
+                  const limit = parseFloat(limitVal as string) || 0;
+                  if (limit <= 0) return null;
+                  
+                  const spent = categorySpentMtd[cat] || 0;
+                  const pct = Math.round((spent / limit) * 100);
+                  
+                  // Color scale: Green (< 70%), Orange (70% - 90%), Red (> 90%)
+                  const progressColor = pct >= 90 
+                    ? "bg-rose-500" 
+                    : pct >= 70 
+                      ? "bg-orange-400" 
+                      : "bg-emerald-500";
+
+                  const textBadgeColor = pct >= 90 
+                    ? "text-rose-600 bg-rose-50" 
+                    : pct >= 70 
+                      ? "text-orange-600 bg-orange-50" 
+                      : "text-emerald-600 bg-emerald-50";
+
+                  return (
+                    <div key={cat} className="space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <div className="flex items-center gap-1.5 font-bold text-stone-700">
+                          <span>
+                            {cat === 'Food' ? '🍱' : cat === 'Transport' ? '⛽' : cat === 'Shopping' ? '📦' : '💰'}
+                          </span>
+                          <span>{cat === 'Food' ? (isId ? 'Makanan' : 'Food') : cat === 'Transport' ? (isId ? 'Transportasi' : 'Transport') : cat === 'Shopping' ? (isId ? 'Belanja' : 'Shopping') : (isId ? 'Tabungan' : 'Savings')}</span>
+                        </div>
+                        <span className={cn("text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider", textBadgeColor)}>
+                          {pct}% {pct >= 100 ? (isId ? 'Terlampaui' : 'Overspent') : ''}
+                        </span>
+                      </div>
+                      
+                      <div className="h-3 w-full bg-stone-100 rounded-full overflow-hidden relative">
+                        <motion.div 
+                          initial={{ width: 0 }}
+                          animate={{ width: `${Math.min(100, pct)}%` }}
+                          transition={{ type: 'spring' as const, stiffness: 60, damping: 12 }}
+                          className={cn("h-full rounded-full transition-all", progressColor)}
+                        />
+                      </div>
+
+                      <div className="flex justify-between items-center text-[10px] font-bold text-stone-400">
+                        <span>{hideBalances ? '••••••' : formatCurrency(spent, family?.currency)} {isId ? 'terpakai' : 'spent'}</span>
+                        <span>{isId ? 'Pagu' : 'Limit'} {hideBalances ? '••••••' : formatCurrency(limit, family?.currency)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <div 
+              onClick={() => setIsSettingsOpen(true)}
+              className="bg-white border border-dashed border-stone-200 rounded-[2.5rem] p-7 text-center space-y-3 cursor-pointer hover:border-orange-200 transition-all active:scale-[0.99] group"
+            >
+              <div className="w-12 h-12 bg-orange-50 text-orange-400 rounded-2xl flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                <span>🛡️</span>
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-stone-700 text-sm">{isId ? 'Anggaran Belum Dipagari' : 'Budget Unprotected'}</h4>
+                <p className="text-xs text-stone-400 max-w-[320px] mx-auto leading-relaxed">
+                  {isId 
+                    ? 'Atur batas anggaran kategori di Pengaturan untuk mencegah kebocoran pengeluaran secara visual.' 
+                    : 'Set category budget caps in Settings to prevent accidental overspending with dynamic indicators.'}
+                </p>
+              </div>
+            </div>
+          )}
+        </motion.section>
 
         {/* Premium AI Financial Suite */}
         <motion.section variants={itemVariants} className="space-y-4">
@@ -447,8 +696,9 @@ const containerVariants = {
           
           <div className="grid grid-cols-2 gap-4">
             <button 
+              id="btn-ai-advisor"
               onClick={() => setIsAiAdvisorOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98"
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
             >
               <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-indigo-50/50 rounded-full group-hover:scale-110 transition-transform" />
               <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 w-max"><Sparkles size={18} /></div>
@@ -459,8 +709,9 @@ const containerVariants = {
             </button>
 
             <button 
+              id="btn-debt-tracker"
               onClick={() => setIsDebtTrackerOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-rose-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98"
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-rose-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
             >
               <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-rose-50/50 rounded-full group-hover:scale-110 transition-transform" />
               <div className="p-3 bg-rose-50 rounded-2xl text-rose-600 w-max"><TrendingDown size={18} /></div>
@@ -471,8 +722,9 @@ const containerVariants = {
             </button>
 
             <button 
+              id="btn-credit-simulator"
               onClick={() => setIsCreditSimOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-emerald-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98"
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-emerald-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
             >
               <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-emerald-50/50 rounded-full group-hover:scale-110 transition-transform" />
               <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 w-max"><BarChart2 size={18} /></div>
@@ -483,8 +735,9 @@ const containerVariants = {
             </button>
 
             <button 
+              id="btn-roadmap"
               onClick={() => setIsRoadmapOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-amber-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98"
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-amber-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
             >
               <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-amber-50/50 rounded-full group-hover:scale-110 transition-transform" />
               <div className="p-3 bg-amber-50 rounded-2xl text-amber-600 w-max"><Compass size={18} /></div>
@@ -495,8 +748,9 @@ const containerVariants = {
             </button>
 
             <button 
+              id="btn-community-feed"
               onClick={() => setIsCommunityOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden col-span-2 group active:scale-98"
+              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden col-span-2 group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
             >
               <div className="absolute -right-8 -bottom-8 w-24 h-24 bg-indigo-50/50 rounded-full group-hover:scale-110 transition-transform" />
               <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 w-max"><Users size={18} /></div>
@@ -515,7 +769,11 @@ const containerVariants = {
               <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{t('recent_activity')}</h3>
               <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{t('live_feed')}</p>
             </div>
-            <button onClick={() => { setHistoryFilterType('all'); setIsHistoryOpen(true); }} className="text-xs text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full transition-all">
+            <button 
+              id="btn-view-all-transactions"
+              onClick={() => { setHistoryFilterType('all'); setIsHistoryOpen(true); }} 
+              className="text-xs text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-4 py-2 rounded-full transition-all focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
+            >
               {t('view_all')}
             </button>
           </div>
@@ -543,7 +801,7 @@ const containerVariants = {
                     "text-lg font-brand font-bold",
                     tx.type === 'expense' ? "text-stone-800" : "text-emerald-600"
                   )}>
-                    {tx.type === 'expense' ? '-' : '+'}{formatCurrency(tx.amount)}
+                    {tx.type === 'expense' ? '-' : '+'}{hideBalances ? '••••••' : formatCurrency(tx.amount, family?.currency)}
                   </p>
                 </div>
               </motion.div>
@@ -574,6 +832,12 @@ const containerVariants = {
                 <p className="text-[10px] text-emerald-600 font-bold uppercase tracking-widest">{t('financial_education')}</p>
               </div>
             </div>
+            <button 
+              onClick={() => setIsKidsModalOpen(true)}
+              className="text-[10px] text-emerald-600 hover:text-emerald-950 font-bold uppercase tracking-widest bg-white/80 backdrop-blur-md px-3.5 py-1.5 rounded-full transition-all active:scale-95 shadow-sm border border-emerald-100"
+            >
+              {isId ? 'Kelola' : 'Manage'}
+            </button>
           </div>
 
           <div className="flex gap-5 overflow-x-auto pb-4 scrollbar-hide snap-x relative z-10">
@@ -603,30 +867,111 @@ const containerVariants = {
               </div>
             ))}
 
-            {tasks.filter(t => t.status !== 'completed').map(task => (
-              <div key={task.id} className="flex-shrink-0 bg-white p-6 rounded-[2.5rem] border border-emerald-50 w-52 space-y-4 shadow-sm snap-center hover:scale-105 transition-transform cursor-pointer">
-                <div className="bg-orange-50 w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner border border-orange-100">💰</div>
-                <div>
-                  <p className="font-bold text-stone-800">{t('task')}</p>
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest truncate max-w-[80px]">{task.title}</span>
-                    <span className="w-1 h-1 rounded-full bg-stone-300 flex-shrink-0" />
-                    <span className="text-[10px] font-bold text-emerald-600 truncate">{formatCurrency(task.rewardAmount)}</span>
+            {tasks.filter(t => t.status !== 'completed').map(task => {
+              const isClaimed = task.status === 'claimed';
+              const isParent = profile?.role === 'parent';
+
+              return (
+                <div key={task.id} className={cn(
+                  "flex-shrink-0 bg-white p-6 rounded-[2.5rem] border w-52 space-y-4 shadow-sm snap-center hover:scale-105 transition-transform cursor-pointer",
+                  isClaimed ? "border-amber-200 bg-amber-50/10 shadow-md shadow-amber-50" : "border-emerald-50"
+                )}>
+                  <div className="flex justify-between items-start">
+                    <div className="bg-orange-50 w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner border border-orange-100">
+                      {isClaimed ? '⏳' : '💰'}
+                    </div>
+                    {isClaimed && (
+                      <span className="text-[8px] font-bold text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        {isId ? 'Menunggu' : 'Awaiting'}
+                      </span>
+                    )}
                   </div>
+                  <div>
+                    <p className="font-bold text-stone-800">{t('task')}</p>
+                    <div className="flex flex-col gap-0.5 mt-1">
+                      <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest truncate max-w-[150px]">{task.title}</span>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="text-[9px] font-semibold text-emerald-600">{formatCurrency(task.rewardAmount)}</span>
+                        {isClaimed && (
+                          <>
+                            <span className="w-1.5 h-1.5 rounded-full bg-stone-300 flex-shrink-0" />
+                            <span className="text-[9px] font-bold text-indigo-600 truncate">{task.claimedByKidName || 'Kid'}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {isClaimed ? (
+                    isParent ? (
+                      <div className="flex gap-2 w-full pt-1">
+                        <button
+                          onClick={async () => {
+                            const kidWalletId = task.claimedByKidWalletId || (kidWallets.length > 0 ? kidWallets[0].id : null);
+                            if (!kidWalletId) return alert(isId ? "Dompet anak tidak ditemukan!" : "Kid wallet not found!");
+                            try {
+                              await claimTask(profile.familyId, kidWalletId, task.id, task.rewardAmount, task.title);
+                              alert(isId ? "Klaim disetujui! Saldo berhasil ditransfer." : "Claim approved! Balance transferred successfully.");
+                            } catch (e: any) {
+                              alert(e.message);
+                            }
+                          }}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white py-2 rounded-xl text-xs font-bold uppercase flex items-center justify-center active:scale-95 transition-transform"
+                        >
+                          {isId ? 'Setuju' : 'Approve'}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            try {
+                              await updateDoc(doc(db, 'tasks', task.id), {
+                                status: 'pending',
+                                claimedByKidWalletId: null,
+                                claimedByKidName: null
+                              });
+                              alert(isId ? "Klaim ditolak dan tugas dikembalikan." : "Claim rejected and task reverted.");
+                            } catch (e: any) {
+                              console.error(e);
+                              alert(isId ? "Gagal menolak klaim." : "Failed to reject claim.");
+                            }
+                          }}
+                          className="bg-rose-500 hover:bg-rose-600 text-white p-2 rounded-xl active:scale-95 transition-transform flex items-center justify-center"
+                          aria-label="Tolak Klaim / Reject Claim"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        disabled
+                        className="w-full bg-stone-100 text-stone-400 py-2.5 rounded-xl text-[9px] font-bold uppercase tracking-wider cursor-not-allowed"
+                      >
+                        {isId ? 'Menunggu Persetujuan' : 'Awaiting Approval'}
+                      </button>
+                    )
+                  ) : (
+                    <button 
+                      onClick={async () => {
+                        if (kidWallets.length === 0) return alert(isId ? "Silakan tambah modul anak terlebih dahulu!" : "Please add a kid wallet first!");
+                        try {
+                          await updateDoc(doc(db, 'tasks', task.id), {
+                            status: 'claimed',
+                            claimedByKidWalletId: kidWallets[0].id,
+                            claimedByKidName: kidWallets[0].name || 'Kid'
+                          });
+                          alert(isId ? "Klaim dikirim! Menunggu persetujuan." : "Claim request submitted! Awaiting parent approval.");
+                        } catch (e: any) { 
+                          console.error(e);
+                          alert(isId ? "Gagal mengajukan klaim." : "Failed to submit claim.");
+                        }
+                      }} 
+                      className="w-full bg-stone-900 hover:bg-stone-800 text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest active:scale-95 transition-transform"
+                    >
+                      {t('claim')}
+                    </button>
+                  )}
                 </div>
-                <button 
-                  onClick={async () => {
-                    if (kidWallets.length === 0) return alert("Please add a kid wallet first!");
-                    try {
-                      await claimTask(profile.familyId, kidWallets[0].id, task.id, task.rewardAmount, task.title);
-                    } catch (e: any) { alert(e.message); }
-                  }} 
-                  className="w-full bg-stone-900 text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-widest"
-                >
-                  {t('claim')}
-                </button>
-              </div>
-            ))}
+              );
+            })}
             
             {savingGoals.length === 0 && tasks.length === 0 && (
               <div className="flex-shrink-0 bg-white/50 p-6 rounded-[2.5rem] border border-dashed border-emerald-200 w-52 flex flex-col items-center justify-center text-center">
@@ -641,19 +986,38 @@ const containerVariants = {
 
       {/* Floating Premium Navigation */}
       <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-stone-900/90 backdrop-blur-2xl rounded-[2.5rem] p-3 flex justify-around items-center z-40 shadow-2xl border border-white/5">
-        <button className="relative group p-4 rounded-3xl bg-white/10 text-white transition-all active:scale-95">
+        <button 
+          id="btn-nav-dashboard"
+          aria-label="Dashboard Beranda / Home Dashboard"
+          className="relative group p-4 rounded-3xl bg-white/10 text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
+        >
           <LayoutDashboard size={22} className="group-hover:scale-110" />
           <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full" />
         </button>
-        <button onClick={() => setIsAnalyticsOpen(true)} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+        <button 
+          id="btn-nav-analytics"
+          aria-label="Analisis Pengeluaran / Expense Analytics"
+          onClick={() => setIsAnalyticsOpen(true)} 
+          className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
+        >
           <PieChart size={22} className="group-hover:scale-110" />
         </button>
         <div className="h-4 w-[1px] bg-stone-700/50 mx-2" />
-        <button onClick={() => setIsGoalsOpen(true)} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+        <button 
+          id="btn-nav-goals"
+          aria-label="Target Keuangan / Financial Goals"
+          onClick={() => setIsGoalsOpen(true)} 
+          className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
+        >
           <Target size={22} className="group-hover:scale-110" />
         </button>
         {isMarried && (
-          <button onClick={() => setIsKidsModalOpen(true)} className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95">
+          <button 
+            id="btn-nav-kids"
+            aria-label="Modul Tabungan Anak / Kids Financial Kit"
+            onClick={() => setIsKidsModalOpen(true)} 
+            className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
+          >
             <Baby size={22} className="group-hover:scale-110" />
           </button>
         )}
@@ -728,6 +1092,8 @@ const containerVariants = {
         totalBalance={family?.totalBalance || 0}
         onRepay={handleRepay}
         spaceType={family?.spaceType || 'personal'}
+        familyId={profile?.familyId || ''}
+        currency={family?.currency}
       />
 
       <CreditSimulatorModal

@@ -28,12 +28,15 @@ export function TransactionHistoryModal({
     const q = query(
       collection(db, 'transactions'),
       where('familyId', '==', familyId),
-      orderBy('date', 'desc'),
-      limit(50)
+      limit(100)
     );
 
     const unsub = onSnapshot(q, (snapshot) => {
-      setTransactions(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      docs.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setTransactions(docs);
+    }, (error) => {
+      console.error("TransactionHistoryModal error loading transactions:", error);
     });
 
     return () => unsub();

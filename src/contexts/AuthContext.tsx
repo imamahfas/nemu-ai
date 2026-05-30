@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
 
 interface AuthContextType {
@@ -24,35 +24,125 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(user);
         if (user) {
           const userDoc = await getDoc(doc(db, 'users', user.uid));
+          const pSpaceId = `personal_${user.uid}`;
+          const cSpaceId = `couple_${user.uid}`;
+          const fSpaceId = `family_${user.uid}`;
+
           if (userDoc.exists()) {
-            setProfile(userDoc.data());
+            const profileData = userDoc.data();
+            
+            // Check if spaces are already initialized in user profile and have correct prefixes
+            const isCorrupted = !profileData.personalSpaceId || 
+                                profileData.personalSpaceId.startsWith('couple_') || 
+                                profileData.personalSpaceId.startsWith('family_') ||
+                                !profileData.coupleSpaceId || 
+                                profileData.coupleSpaceId.startsWith('personal_') || 
+                                profileData.coupleSpaceId.startsWith('family_') ||
+                                !profileData.familySpaceId || 
+                                profileData.familySpaceId.startsWith('personal_') || 
+                                profileData.familySpaceId.startsWith('couple_');
+
+            if (isCorrupted) {
+              // Lazily initialize/heal missing or corrupted spaces for backward compatibility
+              const personalDoc = await getDoc(doc(db, 'families', pSpaceId));
+              if (!personalDoc.exists()) {
+                await setDoc(doc(db, 'families', pSpaceId), {
+                  name: `${profileData.displayName || user.displayName || 'My'} Personal Space`,
+                  totalBalance: 0,
+                  currency: 'IDR',
+                  members: [user.uid],
+                  spaceType: 'personal',
+                  inviteCode: 'P-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+
+              const coupleDoc = await getDoc(doc(db, 'families', cSpaceId));
+              if (!coupleDoc.exists()) {
+                await setDoc(doc(db, 'families', cSpaceId), {
+                  name: `${profileData.displayName || user.displayName || 'Our'} Couple Space`,
+                  totalBalance: 0,
+                  currency: 'IDR',
+                  members: [user.uid],
+                  spaceType: 'unmarried',
+                  inviteCode: 'C-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+
+              const familyDoc = await getDoc(doc(db, 'families', fSpaceId));
+              if (!familyDoc.exists()) {
+                await setDoc(doc(db, 'families', fSpaceId), {
+                  name: `${profileData.displayName || user.displayName || 'Our'} Family Space`,
+                  totalBalance: 0,
+                  currency: 'IDR',
+                  members: [user.uid],
+                  spaceType: 'married',
+                  inviteCode: 'F-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+                  updatedAt: new Date().toISOString(),
+                });
+              }
+
+              // Update profile in users collection
+              const profileUpdates = {
+                personalSpaceId: pSpaceId,
+                coupleSpaceId: cSpaceId,
+                familySpaceId: fSpaceId,
+                familyId: profileData.familyId || pSpaceId
+              };
+              await updateDoc(doc(db, 'users', user.uid), profileUpdates);
+              setProfile({
+                ...profileData,
+                ...profileUpdates
+              });
+            } else {
+              setProfile(profileData);
+            }
           } else {
-            // New user setup
+            // New user setup with isolated triple spaces
+            await setDoc(doc(db, 'families', pSpaceId), {
+              name: `${user.displayName || 'My'} Personal Space`,
+              totalBalance: 0,
+              currency: 'IDR',
+              members: [user.uid],
+              spaceType: 'personal',
+              inviteCode: 'P-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+              updatedAt: new Date().toISOString(),
+            });
+
+            await setDoc(doc(db, 'families', cSpaceId), {
+              name: `${user.displayName || 'Our'} Couple Space`,
+              totalBalance: 0,
+              currency: 'IDR',
+              members: [user.uid],
+              spaceType: 'unmarried',
+              inviteCode: 'C-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+              updatedAt: new Date().toISOString(),
+            });
+
+            await setDoc(doc(db, 'families', fSpaceId), {
+              name: `${user.displayName || 'Our'} Family Space`,
+              totalBalance: 0,
+              currency: 'IDR',
+              members: [user.uid],
+              spaceType: 'married',
+              inviteCode: 'F-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+              updatedAt: new Date().toISOString(),
+            });
+
             const defaultProfile = {
               uid: user.uid,
               email: user.email || '',
               displayName: user.displayName || 'Nemu User',
               photoURL: user.photoURL || '',
-              role: 'parent', // Default role
-              familyId: user.uid, // Default family is self
+              role: 'parent',
+              familyId: pSpaceId, // default active space is Personal
+              personalSpaceId: pSpaceId,
+              coupleSpaceId: cSpaceId,
+              familySpaceId: fSpaceId,
               createdAt: new Date().toISOString(),
             };
             await setDoc(doc(db, 'users', user.uid), defaultProfile);
-            
-            // Generate a simple 6-char alphanumeric invite code
-            const inviteCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-            // Initialize family
-            await setDoc(doc(db, 'families', user.uid), {
-              name: `${user.displayName || 'Family'}'s Space`,
-              totalBalance: 0,
-              currency: 'IDR',
-              members: [user.uid],
-              spaceType: 'personal', // Default mode
-              inviteCode: inviteCode,
-              updatedAt: new Date().toISOString(),
-            });
-            
             setProfile(defaultProfile);
           }
         } else {

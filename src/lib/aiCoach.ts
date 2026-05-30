@@ -1,6 +1,13 @@
 import { GoogleGenAI } from '@google/genai';
 
-export async function generateFinancialAdvice(transactions: any[], language: string, spaceType = 'personal'): Promise<string> {
+export async function generateFinancialAdvice(
+  transactions: any[], 
+  language: string, 
+  spaceType = 'personal',
+  budgetLimits: Record<string, number> = {},
+  categorySpent: Record<string, number> = {},
+  currency = 'IDR'
+): Promise<string> {
   if (!transactions || transactions.length === 0) {
     return language.startsWith('id') 
       ? "Belum ada cukup data transaksi. Mulai catat pengeluaran Anda agar AI bisa memberikan saran!"
@@ -24,12 +31,25 @@ export async function generateFinancialAdvice(transactions: any[], language: str
         ? 'an expert, empathetic financial coach for a couple.'
         : 'an expert, empathetic financial coach for a family.';
 
+    // Construct budget context for Gemini prompt
+    const budgetContext = Object.entries(budgetLimits)
+      .map(([cat, limit]) => {
+        if (!limit || limit <= 0) return null;
+        const spent = categorySpent[cat] || 0;
+        const pct = Math.round((spent / limit) * 100);
+        return { category: cat, limit, spent, percent: pct };
+      })
+      .filter((b): b is NonNullable<typeof b> => b !== null);
+
     const prompt = `
       You are ${coachRole}
       Here is their recent transaction data (last 20 transactions):
       ${JSON.stringify(recentTx)}
+
+      Category Budget Limits and current monthly spending in ${currency}:
+      ${JSON.stringify(budgetContext)}
       
-      Provide a ONE SENTENCE actionable financial insight or encouragement based on this data. 
+      Provide a ONE SENTENCE actionable financial insight or encouragement based on this data. If any category budget limits are approaching (over 80%) or exceeded (over 100%), prioritize giving a warm but firm warning regarding those specific categories (mentioning the category name).
       Keep it very concise, friendly, and under 25 words. 
       Write the response in ${language.startsWith('id') ? 'Indonesian' : 'English'}.
       Do not use markdown formatting.
@@ -44,7 +64,38 @@ export async function generateFinancialAdvice(transactions: any[], language: str
   } catch (error) {
     console.error("AI Coach error:", error);
     
-    // Smart Client-Side Fallback: Analyze transactions dynamically
+    // Smart Client-Side Fallback: Check category budget warnings first
+    const warnings = Object.entries(budgetLimits)
+      .map(([cat, limit]) => {
+        if (!limit || limit <= 0) return null;
+        const spent = categorySpent[cat] || 0;
+        const pct = Math.round((spent / limit) * 100);
+        if (pct >= 80) {
+          return { category: cat, percent: pct, spent, limit };
+        }
+        return null;
+      })
+      .filter((w): w is NonNullable<typeof w> => w !== null);
+
+    if (warnings.length > 0) {
+      warnings.sort((a, b) => b.percent - a.percent);
+      const topWarning = warnings[0];
+      if (language.startsWith('id')) {
+        if (topWarning.percent >= 100) {
+          return `Perhatian! Anggaran ${topWarning.category} Anda sudah terlampaui (${topWarning.percent}%). Segera batasi transaksi di kategori ini!`;
+        } else {
+          return `Awas! Anggaran ${topWarning.category} sudah mendekati batas (${topWarning.percent}% terpakai). Kendalikan pengeluaran Anda agar tidak bocor.`;
+        }
+      } else {
+        if (topWarning.percent >= 100) {
+          return `Warning! Your ${topWarning.category} budget has been exceeded (${topWarning.percent}%). Limit transactions in this category immediately!`;
+        } else {
+          return `Watch out! Your ${topWarning.category} budget is approaching its limit (${topWarning.percent}% used). Keep tight control of your spending.`;
+        }
+      }
+    }
+
+    // Standard fallback logic analyzing transactions
     const expenses = transactions.filter(t => t.type === 'expense');
     if (expenses.length === 0) {
       return language.startsWith('id')

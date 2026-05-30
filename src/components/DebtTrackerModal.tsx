@@ -3,6 +3,8 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, TrendingDown, Plus, CreditCard, Calendar, BarChart2, DollarSign } from 'lucide-react';
 import { formatCurrency, formatNumberInput } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
+import { db } from '../lib/firebase';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc } from 'firebase/firestore';
 
 interface Debt {
   id: string;
@@ -15,21 +17,17 @@ interface Debt {
   createdAt: string;
 }
 
-export function DebtTrackerModal({ isOpen, onClose, totalBalance, onRepay, spaceType, currency = 'IDR' }: {
+export function DebtTrackerModal({ isOpen, onClose, totalBalance, onRepay, spaceType, familyId, currency = 'IDR' }: {
   isOpen: boolean;
   onClose: () => void;
   totalBalance: number;
   onRepay: (amount: number, description: string) => Promise<void>;
   spaceType: string;
+  familyId: string;
   currency?: string;
 }) {
   const { t, i18n } = useTranslation();
-  // Load debts directly from localStorage with clean slate fallback
-  const [debts, setDebts] = useState<Debt[]>(() => {
-    const saved = localStorage.getItem(`nemu_debts_${spaceType}`);
-    return saved ? JSON.parse(saved) : [];
-  });
-  
+  const [debts, setDebts] = useState<Debt[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   
   // Form State
@@ -39,29 +37,54 @@ export function DebtTrackerModal({ isOpen, onClose, totalBalance, onRepay, space
   const [interestType, setInterestType] = useState<'fixed' | 'floating'>('fixed');
   const [tenor, setTenor] = useState('');
 
-  // Persist debts on updates
+  // Sync debts from Firestore real-time collection
   useEffect(() => {
-    localStorage.setItem(`nemu_debts_${spaceType}`, JSON.stringify(debts));
-  }, [debts, spaceType]);
+    if (!familyId || !isOpen) return;
 
-  const handleAddDebt = (e: React.FormEvent) => {
+    const q = query(
+      collection(db, 'debts'),
+      where('familyId', '==', familyId)
+    );
+
+    const unsub = onSnapshot(q, (snapshot) => {
+      const loadedDebts = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      })) as Debt[];
+      
+      // Sort chronologically (descending by createdAt) locally to avoid index requirement
+      loadedDebts.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setDebts(loadedDebts);
+    }, (error) => {
+      console.error("Firestore loading debts error:", error);
+    });
+
+    return unsub;
+  }, [familyId, isOpen]);
+
+  const handleAddDebt = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!lender || !principal || !interestRate || !tenor) return;
+    if (!lender || !principal || !interestRate || !tenor || !familyId) return;
 
-    const newDebt: Debt = {
-      id: Math.random().toString(),
-      lender,
-      principal: parseFloat(principal),
-      interestRate: parseFloat(interestRate),
-      interestType,
-      tenor: parseInt(tenor),
-      paidAmount: 0,
-      createdAt: new Date().toISOString()
-    };
+    try {
+      await addDoc(collection(db, 'debts'), {
+        familyId,
+        lender,
+        principal: parseFloat(principal),
+        interestRate: parseFloat(interestRate),
+        interestType,
+        tenor: parseInt(tenor),
+        paidAmount: 0,
+        createdAt: new Date().toISOString()
+      });
 
-    setDebts(prev => [newDebt, ...prev]);
-    setLender(''); setPrincipal(''); setInterestRate(''); setTenor('');
-    setIsAdding(false);
+      setLender(''); setPrincipal(''); setInterestRate(''); setTenor('');
+      setIsAdding(false);
+    } catch (err) {
+      console.error("Failed to add debt to Firestore:", err);
+      const isId = i18n.language?.startsWith('id');
+      alert(isId ? "Gagal menambahkan utang." : "Failed to add debt.");
+    }
   };
 
   const handleRepayDebt = async (debtId: string, installment: number) => {
@@ -78,19 +101,17 @@ export function DebtTrackerModal({ isOpen, onClose, totalBalance, onRepay, space
       // Log transaction in parent
       await onRepay(installment, `Repayment to ${targetDebt.lender}`);
 
-      // Update local state
-      setDebts(prev => prev.map(d => {
-        if (d.id === debtId) {
-          const totalDebtObligation = d.principal * (1 + (d.interestRate / 100) * (d.tenor / 12));
-          const newPaidAmount = Math.min(totalDebtObligation, d.paidAmount + installment);
-          return { ...d, paidAmount: newPaidAmount };
-        }
-        return d;
-      }));
-      const isId = i18n.language?.startsWith('id');
+      // Update Firestore document
+      const totalDebtObligation = targetDebt.principal * (1 + (targetDebt.interestRate / 100) * (targetDebt.tenor / 12));
+      const newPaidAmount = Math.min(totalDebtObligation, targetDebt.paidAmount + installment);
+      
+      await updateDoc(doc(db, 'debts', debtId), {
+        paidAmount: newPaidAmount,
+        updatedAt: new Date().toISOString()
+      });
+
       alert(isId ? "Pembayaran berhasil!" : "Repayment successful!");
     } catch (e) {
-      const isId = i18n.language?.startsWith('id');
       console.error(e);
       alert(isId ? "Gagal mencatat pembayaran." : "Failed to record repayment.");
     }

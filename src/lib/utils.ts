@@ -6,10 +6,15 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number, currency: string = 'IDR') {
-  return new Intl.NumberFormat('id-ID', {
+  const upperCurrency = (currency || 'IDR').toUpperCase();
+  let locale = 'id-ID';
+  if (upperCurrency === 'USD') locale = 'en-US';
+  else if (upperCurrency === 'SGD') locale = 'en-SG';
+  
+  return new Intl.NumberFormat(locale, {
     style: 'currency',
-    currency: 'IDR',
-    minimumFractionDigits: 0,
+    currency: upperCurrency,
+    minimumFractionDigits: upperCurrency === 'IDR' ? 0 : 2,
   }).format(amount);
 }
 
