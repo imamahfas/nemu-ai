@@ -79,7 +79,7 @@ export function CameraScanner({ onScanComplete, onClose }: {
       // Remove data:image/jpeg;base64, prefix
       const data = base64Data.split(',')[1];
       
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
       const res = await fetch(url, {
         method: 'POST',
         headers: {

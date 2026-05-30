@@ -432,13 +432,13 @@ const containerVariants = {
                     )}
                   </span>
                 </p>
-                <div className="flex items-center gap-3.5 py-1.5">
-                  <h2 className="text-5xl font-brand font-bold tracking-tight text-white leading-none">
+                <div className="flex items-center gap-3.5 py-1.5 flex-wrap">
+                  <h2 className="text-3xl sm:text-5xl font-brand font-bold tracking-tight text-white leading-none break-all">
                     {hideBalances ? '••••••' : formatCurrency(family?.totalBalance || 0, family?.currency)}
                   </h2>
                   <button 
                     onClick={() => setHideBalances(!hideBalances)}
-                    className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-stone-400 hover:text-white flex items-center justify-center active:scale-90"
+                    className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition-all text-stone-400 hover:text-white flex items-center justify-center active:scale-90 flex-shrink-0"
                     aria-label={hideBalances ? "Tampilkan saldo" : "Sembunyikan saldo"}
                   >
                     {hideBalances ? <Eye size={22} /> : <EyeOff size={22} />}
