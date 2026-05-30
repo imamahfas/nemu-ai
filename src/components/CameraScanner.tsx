@@ -1,7 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
-import { Camera, RefreshCw, X } from 'lucide-react';
+import { Camera, RefreshCw, X, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI } from '@google/genai';
 import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
 
@@ -9,11 +8,25 @@ export function CameraScanner({ onScanComplete, onClose }: {
   onScanComplete: (data: any) => void;
   onClose: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64Data = reader.result as string;
+      setCapturedImage(base64Data);
+      processWithGemini(base64Data);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const startCamera = async () => {
     try {
@@ -58,26 +71,52 @@ export function CameraScanner({ onScanComplete, onClose }: {
   const processWithGemini = async (base64Data: string) => {
     setIsScanning(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Gemini API Key is not configured in .env");
+      }
+
       // Remove data:image/jpeg;base64, prefix
       const data = base64Data.split(',')[1];
       
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: [
-          {
-            parts: [
-              { text: "Extract receipt data from the image. Return ONLY a JSON object exactly with this structure: { 'Store Name': string, 'Date': string, 'Total': number, 'Category': string (e.g. Food, Transport, Shopping, Utilities), 'Items': [ { 'Name': string, 'Qty': number, 'Price': number, 'Category': string } ] }. Do not include markdown tags like ```json." },
-              { inlineData: { data, mimeType: "image/jpeg" } }
-            ]
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: "Extract receipt data from the image. Return ONLY a JSON object exactly with this structure: { 'Store Name': string, 'Date': string, 'Total': number, 'Category': string (e.g. Food, Transport, Shopping, Utilities), 'Items': [ { 'Name': string, 'Qty': number, 'Price': number, 'Category': string } ] }. Do not include markdown tags like ```json." },
+                {
+                  inlineData: {
+                    mimeType: "image/jpeg",
+                    data: data
+                  }
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json"
           }
-        ],
-        config: {
-          responseMimeType: "application/json"
-        }
+        })
       });
-      
-      const cleanText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gemini API error (${res.status}): ${errText}`);
+      }
+
+      const resData = await res.json();
+      const text = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!text) {
+        throw new Error("Empty response from Gemini API");
+      }
+
+      const cleanText = text.replace(/```json/g, '').replace(/```/g, '').trim();
       const result = JSON.parse(cleanText);
       onScanComplete(result);
     } catch (error: any) {
@@ -119,17 +158,38 @@ export function CameraScanner({ onScanComplete, onClose }: {
               ref={videoRef} 
               autoPlay 
               playsInline 
+              muted
               className="w-full h-full object-cover" 
             />
             {!stream && (
-              <div className="absolute inset-0 flex items-center justify-center">
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
                 <button 
                   onClick={startCamera}
-                  className="bg-zinc-800 text-white px-6 py-3 rounded-2xl flex items-center gap-2 hover:bg-zinc-700 transition-colors"
+                  className="bg-zinc-800 text-white px-6 py-3.5 rounded-2xl flex items-center gap-2 hover:bg-zinc-700 transition-colors font-medium w-60 justify-center shadow-lg"
                 >
                   <Camera size={20} />
                   {t('camera_start')}
                 </button>
+                
+                <span className="text-zinc-500 text-xs font-bold uppercase tracking-wider">
+                  {i18n.language?.startsWith('id') ? 'atau' : 'or'}
+                </span>
+
+                <button 
+                  onClick={() => fileInputRef.current?.click()}
+                  className="bg-zinc-800 border border-zinc-700 text-white px-6 py-3.5 rounded-2xl flex items-center gap-2 hover:bg-zinc-700 transition-colors font-medium w-60 justify-center shadow-lg"
+                >
+                  <Download size={20} />
+                  {i18n.language?.startsWith('id') ? 'Pilih dari Galeri' : 'Choose from Gallery'}
+                </button>
+                
+                <input 
+                  type="file" 
+                  ref={fileInputRef}
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
               </div>
             )}
             {stream && (

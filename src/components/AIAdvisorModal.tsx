@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { X, Sparkles, Send, Bot, User as UserIcon, HelpCircle } from 'lucide-react';
-import { GoogleGenAI } from '@google/genai';
 import { useTranslation } from 'react-i18next';
+import { X, Sparkles, Send, Bot, User as UserIcon, HelpCircle } from 'lucide-react';
 import { formatCurrency } from '../lib/utils';
 
 interface Message {
@@ -80,7 +79,11 @@ export function AIAdvisorModal({ isOpen, onClose, transactions, spaceType }: {
     setIsTyping(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Gemini API Key is not configured in .env");
+      }
+
       const recentTx = transactions.slice(0, 15).map(t => ({
         amount: t.amount,
         type: t.type,
@@ -100,14 +103,37 @@ export function AIAdvisorModal({ isOpen, onClose, transactions, spaceType }: {
         Respond in ${i18n.language === 'id' ? 'Indonesian' : 'English'}.
       `;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
-        contents: contextPrompt
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                { text: contextPrompt }
+              ]
+            }
+          ]
+        })
       });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Gemini API error (${res.status}): ${errText}`);
+      }
+
+      const resData = await res.json();
+      const botResponseText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!botResponseText) {
+        throw new Error("Empty response from Gemini API");
+      }
 
       const botMsg: Message = {
         sender: 'bot',
-        text: response.text.trim(),
+        text: botResponseText.trim(),
         timestamp: new Date()
       };
       setMessages(prev => [...prev, botMsg]);

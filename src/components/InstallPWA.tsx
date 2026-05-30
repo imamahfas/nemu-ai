@@ -19,7 +19,12 @@ export function InstallPWA() {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
 
     // Check if user previously dismissed the iOS install banner
-    const isIOSDismissed = localStorage.getItem('nemu_ios_install_dismissed') === 'true';
+    let isIOSDismissed = false;
+    try {
+      isIOSDismissed = localStorage.getItem('nemu_ios_install_dismissed') === 'true';
+    } catch (e) {
+      console.warn("localStorage is not available:", e);
+    }
 
     if (isIOSDevice && !isStandalone && !isIOSDismissed) {
       setShowIOSInstall(true);
@@ -54,7 +59,11 @@ export function InstallPWA() {
   };
 
   const handleDismissIOS = () => {
-    localStorage.setItem('nemu_ios_install_dismissed', 'true');
+    try {
+      localStorage.setItem('nemu_ios_install_dismissed', 'true');
+    } catch (e) {
+      console.warn("localStorage write failed:", e);
+    }
     setShowIOSInstall(false);
   };
 

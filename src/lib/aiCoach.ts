@@ -1,4 +1,4 @@
-import { GoogleGenAI } from '@google/genai';
+import { formatCurrency } from './utils';
 
 export async function generateFinancialAdvice(
   transactions: any[], 
@@ -15,7 +15,10 @@ export async function generateFinancialAdvice(
   }
 
   try {
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("Gemini API Key is not configured in .env");
+    }
     
     // Summarize data for AI to save tokens
     const recentTx = transactions.slice(0, 20).map(t => ({
@@ -55,12 +58,35 @@ export async function generateFinancialAdvice(
       Do not use markdown formatting.
     `;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-1.5-flash",
-      contents: prompt,
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              { text: prompt }
+            ]
+          }
+        ]
+      })
     });
 
-    return response.text.trim();
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gemini API error (${res.status}): ${errText}`);
+    }
+
+    const resData = await res.json();
+    const adviceText = resData.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!adviceText) {
+      throw new Error("Empty response from Gemini API");
+    }
+
+    return adviceText.trim();
   } catch (error) {
     console.error("AI Coach error:", error);
     
