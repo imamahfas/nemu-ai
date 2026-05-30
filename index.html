@@ -9,6 +9,25 @@
     <meta name="apple-mobile-web-app-title" content="Nemu" />
     <link rel="apple-touch-icon" href="/pwa-192x192.png" />
     <title>Nemu — Family Finance</title>
+    <script>
+      // Self-healing check: Force unregister corrupted PWA Service Workers if bypass=1 is in URL
+      if (window.location.search.includes('bypass=1') || window.location.search.includes('nocache=')) {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.getRegistrations().then(function(registrations) {
+            for (var i = 0; i < registrations.length; i++) {
+              registrations[i].unregister();
+            }
+            console.log('Self-healing: service workers unregistered.');
+            // Redirect to clean home page after unregistering
+            setTimeout(function() {
+              window.location.href = window.location.origin + window.location.pathname;
+            }, 300);
+          }).catch(function(err) {
+            console.error('Self-healing error:', err);
+          });
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
