@@ -1,0 +1,6 @@
+.git
+.gitignore
+node_modules/
+.firebase/
+dist/workbox-*
+dist/sw.js.map
