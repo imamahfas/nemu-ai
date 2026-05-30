@@ -824,286 +824,296 @@ const containerVariants = {
         </motion.div>
 
         {/* Premium Wealth Indicators */}
-        <motion.div variants={itemVariants} className="grid grid-cols-2 gap-4">
-          <div 
-            id="btn-health-score"
-            role="button"
-            tabIndex={0}
-            aria-label="Buka Detail Kesehatan Finansial / Open Financial Health Detail"
-            onClick={() => { setHealthDetailTab('health'); setIsHealthDetailOpen(true); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setHealthDetailTab('health'); setIsHealthDetailOpen(true); } }}
-            className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all active:scale-[0.99] group focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
-          >
-            <div className="space-y-1">
-              <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('financial_health')}</span>
-              <h4 className="text-xl font-brand font-bold text-stone-800">{healthScore} / 100</h4>
-              <span className={cn(
-                "text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase",
-                healthScore >= 80 ? "text-emerald-600 bg-emerald-50" : healthScore >= 50 ? "text-orange-600 bg-orange-50" : "text-rose-600 bg-rose-50"
+        {!isChild && (
+          <motion.div variants={itemVariants} className="grid grid-cols-2 gap-4">
+            <div 
+              id="btn-health-score"
+              role="button"
+              tabIndex={0}
+              aria-label="Buka Detail Kesehatan Finansial / Open Financial Health Detail"
+              onClick={() => { setHealthDetailTab('health'); setIsHealthDetailOpen(true); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setHealthDetailTab('health'); setIsHealthDetailOpen(true); } }}
+              className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-emerald-300 hover:shadow-md transition-all active:scale-[0.99] group focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
+            >
+              <div className="space-y-1">
+                <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('financial_health')}</span>
+                <h4 className="text-xl font-brand font-bold text-stone-800">{healthScore} / 100</h4>
+                <span className={cn(
+                  "text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase",
+                  healthScore >= 80 ? "text-emerald-600 bg-emerald-50" : healthScore >= 50 ? "text-orange-600 bg-orange-50" : "text-rose-600 bg-rose-50"
+                )}>
+                  {healthScore >= 80 ? t('excellent') : healthScore >= 50 ? (isId ? 'Cukup Sehat' : 'Fair') : (isId ? 'Buruk' : 'Critical')}
+                </span>
+              </div>
+              <div className={cn(
+                "w-10 h-10 rounded-full border-[3px] border-stone-100 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow",
+                healthScore >= 80 ? "border-t-emerald-500" : healthScore >= 50 ? "border-t-orange-400" : "border-t-rose-500"
               )}>
-                {healthScore >= 80 ? t('excellent') : healthScore >= 50 ? (isId ? 'Cukup Sehat' : 'Fair') : (isId ? 'Buruk' : 'Critical')}
-              </span>
+                {healthScore}%
+              </div>
             </div>
-            <div className={cn(
-              "w-10 h-10 rounded-full border-[3px] border-stone-100 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow",
-              healthScore >= 80 ? "border-t-emerald-500" : healthScore >= 50 ? "border-t-orange-400" : "border-t-rose-500"
-            )}>
-              {healthScore}%
-            </div>
-          </div>
-          <div 
-            id="btn-dti-ratio"
-            role="button"
-            tabIndex={0}
-            aria-label="Buka Detail Rasio Debt-to-Income / Open Debt-to-Income Ratio Detail"
-            onClick={() => { setHealthDetailTab('dti'); setIsHealthDetailOpen(true); }}
-            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setHealthDetailTab('dti'); setIsHealthDetailOpen(true); } }}
-            className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all active:scale-[0.99] group focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
-          >
-            <div className="space-y-1">
-              <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('debt_to_income')}</span>
-              <h4 className="text-xl font-brand font-bold text-stone-800">{dtiRatio}% {t('ratio')}</h4>
-              <span className={cn(
-                "text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase",
-                dtiRatio < 30 ? "text-emerald-600 bg-emerald-50" : dtiRatio <= 50 ? "text-orange-600 bg-orange-50" : "text-rose-600 bg-rose-50"
+            <div 
+              id="btn-dti-ratio"
+              role="button"
+              tabIndex={0}
+              aria-label="Buka Detail Rasio Debt-to-Income / Open Debt-to-Income Ratio Detail"
+              onClick={() => { setHealthDetailTab('dti'); setIsHealthDetailOpen(true); }}
+              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { setHealthDetailTab('dti'); setIsHealthDetailOpen(true); } }}
+              className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center justify-between shadow-sm cursor-pointer hover:border-indigo-300 hover:shadow-md transition-all active:scale-[0.99] group focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
+            >
+              <div className="space-y-1">
+                <span className="text-[9px] text-stone-400 font-bold uppercase tracking-widest block">{t('debt_to_income')}</span>
+                <h4 className="text-xl font-brand font-bold text-stone-800">{dtiRatio}% {t('ratio')}</h4>
+                <span className={cn(
+                  "text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase",
+                  dtiRatio < 30 ? "text-emerald-600 bg-emerald-50" : dtiRatio <= 50 ? "text-orange-600 bg-orange-50" : "text-rose-600 bg-rose-50"
+                )}>
+                  {dtiRatio < 30 ? (isId ? 'Batas Aman' : 'Healthy Limit') : dtiRatio <= 50 ? (isId ? 'Waspada' : 'Moderate') : (isId ? 'Beban Tinggi' : 'High Obligation')}
+                </span>
+              </div>
+              <div className={cn(
+                "w-10 h-10 rounded-full border-[3px] border-stone-100 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow",
+                dtiRatio < 30 ? "border-t-emerald-500" : dtiRatio <= 50 ? "border-t-orange-400" : "border-t-rose-500"
               )}>
-                {dtiRatio < 30 ? (isId ? 'Batas Aman' : 'Healthy Limit') : dtiRatio <= 50 ? (isId ? 'Waspada' : 'Moderate') : (isId ? 'Beban Tinggi' : 'High Obligation')}
-              </span>
+                {dtiRatio}%
+              </div>
             </div>
-            <div className={cn(
-              "w-10 h-10 rounded-full border-[3px] border-stone-100 flex items-center justify-center font-bold text-[10px] text-stone-700 shadow-sm group-hover:scale-105 transition-transform animate-spin-slow",
-              dtiRatio < 30 ? "border-t-emerald-500" : dtiRatio <= 50 ? "border-t-orange-400" : "border-t-rose-500"
-            )}>
-              {dtiRatio}%
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         {/* AI Insight Card - Elevated Design */}
-        <motion.section variants={itemVariants} className="relative group">
-          <div className="absolute inset-0 bg-orange-400 blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
-          <div className="bg-white border border-orange-100 rounded-[2.5rem] p-7 space-y-5 shadow-sm relative overflow-hidden active:scale-[0.98] transition-transform">
-            <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-orange-50/50 rounded-full blur-3xl" />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-orange-50 rounded-2xl text-orange-400 animate-pulse">
-                  <Sparkles size={20} className="fill-orange-400" />
+        {!isChild && (
+          <motion.section variants={itemVariants} className="relative group">
+            <div className="absolute inset-0 bg-orange-400 blur-2xl opacity-10 group-hover:opacity-20 transition-opacity" />
+            <div className="bg-white border border-orange-100 rounded-[2.5rem] p-7 space-y-5 shadow-sm relative overflow-hidden active:scale-[0.98] transition-transform">
+              <div className="absolute -right-8 -bottom-8 w-32 h-32 bg-orange-50/50 rounded-full blur-3xl" />
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-orange-50 rounded-2xl text-orange-400 animate-pulse">
+                    <Sparkles size={20} className="fill-orange-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-brand font-bold text-stone-800 tracking-tight">{t('financial_coach')}</h3>
+                    <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">{i18n.language.startsWith('id') ? 'Analisis Real-time' : 'Real-time Analysis'}</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-brand font-bold text-stone-800 tracking-tight">{t('financial_coach')}</h3>
-                  <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest">{i18n.language.startsWith('id') ? 'Analisis Real-time' : 'Real-time Analysis'}</p>
-                </div>
+                <button 
+                  onClick={loadAiAdvice} 
+                  disabled={isGeneratingAdvice}
+                  className="text-[10px] bg-stone-50 text-stone-400 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors disabled:opacity-50"
+                >
+                  {isGeneratingAdvice ? (i18n.language.startsWith('id') ? 'Berpikir...' : 'Thinking...') : (i18n.language.startsWith('id') ? 'Analisis' : 'Analyze')}
+                </button>
               </div>
-              <button 
-                onClick={loadAiAdvice} 
-                disabled={isGeneratingAdvice}
-                className="text-[10px] bg-stone-50 text-stone-400 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-100 transition-colors disabled:opacity-50"
-              >
-                {isGeneratingAdvice ? (i18n.language.startsWith('id') ? 'Berpikir...' : 'Thinking...') : (i18n.language.startsWith('id') ? 'Analisis' : 'Analyze')}
-              </button>
+              <p className="text-stone-600 text-sm leading-relaxed font-medium italic">
+                {aiAdvice || (i18n.language === 'id' 
+                  ? `"Ketuk tombol Analyze untuk mendapatkan analisis AI terhadap transaksi terbaru Anda."`
+                  : `"Tap the Analyze button to get an AI analysis of your recent transactions."`
+                )}
+              </p>
             </div>
-            <p className="text-stone-600 text-sm leading-relaxed font-medium italic">
-              {aiAdvice || (i18n.language === 'id' 
-                ? `"Ketuk tombol Analyze untuk mendapatkan analisis AI terhadap transaksi terbaru Anda."`
-                : `"Tap the Analyze button to get an AI analysis of your recent transactions."`
-              )}
-            </p>
-          </div>
-        </motion.section>
+          </motion.section>
+        )}
 
         {/* Bento Grid Quick Stats */}
-        <motion.div variants={itemVariants} className="grid grid-cols-2 gap-5">
-          <div 
-            onClick={() => { setHistoryFilterType('income'); setIsHistoryOpen(true); }}
-            className="bg-white p-6 rounded-[2.5rem] border border-stone-100 space-y-4 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all active:scale-[0.99] cursor-pointer group"
-          >
-            <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
-              <TrendingDown size={22} />
+        {!isChild && (
+          <motion.div variants={itemVariants} className="grid grid-cols-2 gap-5">
+            <div 
+              onClick={() => { setHistoryFilterType('income'); setIsHistoryOpen(true); }}
+              className="bg-white p-6 rounded-[2.5rem] border border-stone-100 space-y-4 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all active:scale-[0.99] cursor-pointer group"
+            >
+              <div className="w-12 h-12 bg-emerald-50 rounded-2xl flex items-center justify-center text-emerald-600 group-hover:scale-110 transition-transform">
+                <TrendingDown size={22} />
+              </div>
+              <div>
+                <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('income')}</p>
+                <p className="text-xl font-brand font-bold text-stone-800 mt-1">{hideBalances ? '••••••' : formatCurrency(totalIncome, family?.currency)}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('income')}</p>
-              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{hideBalances ? '••••••' : formatCurrency(totalIncome, family?.currency)}</p>
+            <div 
+              onClick={() => { setHistoryFilterType('expense'); setIsHistoryOpen(true); }}
+              className="bg-white p-6 rounded-[2.5rem] border border-stone-100 space-y-4 shadow-sm hover:shadow-md hover:border-rose-300 transition-all active:scale-[0.99] cursor-pointer group"
+            >
+              <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
+                <TrendingUp size={22} />
+              </div>
+              <div>
+                <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('expenses')}</p>
+                <p className="text-xl font-brand font-bold text-stone-800 mt-1">{hideBalances ? '••••••' : formatCurrency(totalExpense, family?.currency)}</p>
+              </div>
             </div>
-          </div>
-          <div 
-            onClick={() => { setHistoryFilterType('expense'); setIsHistoryOpen(true); }}
-            className="bg-white p-6 rounded-[2.5rem] border border-stone-100 space-y-4 shadow-sm hover:shadow-md hover:border-rose-300 transition-all active:scale-[0.99] cursor-pointer group"
-          >
-            <div className="w-12 h-12 bg-rose-50 rounded-2xl flex items-center justify-center text-rose-600 group-hover:scale-110 transition-transform">
-              <TrendingUp size={22} />
-            </div>
-            <div>
-              <p className="text-stone-400 text-xs font-bold uppercase tracking-widest">{t('expenses')}</p>
-              <p className="text-xl font-brand font-bold text-stone-800 mt-1">{hideBalances ? '••••••' : formatCurrency(totalExpense, family?.currency)}</p>
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         {/* Category Budget Caps Section */}
-        <motion.section variants={itemVariants} className="space-y-4">
-          <div className="flex justify-between items-center px-2">
-            <div>
-              <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{isId ? 'Anggaran Bulanan' : 'Monthly Budgets'}</h3>
-              <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{isId ? 'Pagu Kategori Aktif' : 'Active Category Caps'}</p>
+        {!isChild && (
+          <motion.section variants={itemVariants} className="space-y-4">
+            <div className="flex justify-between items-center px-2">
+              <div>
+                <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{isId ? 'Anggaran Bulanan' : 'Monthly Budgets'}</h3>
+                <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{isId ? 'Pagu Kategori Aktif' : 'Active Category Caps'}</p>
+              </div>
+              <button 
+                id="btn-edit-budgets"
+                onClick={() => setIsSettingsOpen(true)}
+                className="text-[10px] text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-3.5 py-1.5 rounded-full transition-colors focus:outline-none"
+              >
+                {isId ? 'Atur Batas' : 'Set Limits'}
+              </button>
             </div>
-            <button 
-              id="btn-edit-budgets"
-              onClick={() => setIsSettingsOpen(true)}
-              className="text-[10px] text-stone-400 hover:text-stone-900 font-bold uppercase tracking-widest bg-stone-50 px-3.5 py-1.5 rounded-full transition-colors focus:outline-none"
-            >
-              {isId ? 'Atur Batas' : 'Set Limits'}
-            </button>
-          </div>
 
-          {family?.budgetLimits && Object.keys(family.budgetLimits).length > 0 ? (
-            <div className="grid gap-4 bg-white border border-stone-100 p-6 rounded-[2.5rem] shadow-sm relative overflow-hidden">
-              <div className="space-y-5">
-                {Object.entries(family.budgetLimits).map(([cat, limitVal]) => {
-                  const limit = parseFloat(limitVal as string) || 0;
-                  if (limit <= 0) return null;
-                  
-                  const spent = categorySpentMtd[cat] || 0;
-                  const pct = Math.round((spent / limit) * 100);
-                  
-                  // Color scale: Green (< 70%), Orange (70% - 90%), Red (> 90%)
-                  const progressColor = pct >= 90 
-                    ? "bg-rose-500" 
-                    : pct >= 70 
-                      ? "bg-orange-400" 
-                      : "bg-emerald-500";
+            {family?.budgetLimits && Object.keys(family.budgetLimits).length > 0 ? (
+              <div className="grid gap-4 bg-white border border-stone-100 p-6 rounded-[2.5rem] shadow-sm relative overflow-hidden">
+                <div className="space-y-5">
+                  {Object.entries(family.budgetLimits).map(([cat, limitVal]) => {
+                    const limit = parseFloat(limitVal as string) || 0;
+                    if (limit <= 0) return null;
+                    
+                    const spent = categorySpentMtd[cat] || 0;
+                    const pct = Math.round((spent / limit) * 100);
+                    
+                    // Color scale: Green (< 70%), Orange (70% - 90%), Red (> 90%)
+                    const progressColor = pct >= 90 
+                      ? "bg-rose-500" 
+                      : pct >= 70 
+                        ? "bg-orange-400" 
+                        : "bg-emerald-500";
 
-                  const textBadgeColor = pct >= 90 
-                    ? "text-rose-600 bg-rose-50" 
-                    : pct >= 70 
-                      ? "text-orange-600 bg-orange-50" 
-                      : "text-emerald-600 bg-emerald-50";
+                    const textBadgeColor = pct >= 90 
+                      ? "text-rose-600 bg-rose-50" 
+                      : pct >= 70 
+                        ? "text-orange-600 bg-orange-50" 
+                        : "text-emerald-600 bg-emerald-50";
 
-                  return (
-                    <div key={cat} className="space-y-2">
-                      <div className="flex justify-between items-center text-xs">
-                        <div className="flex items-center gap-1.5 font-bold text-stone-700">
-                          <span>
-                            {cat === 'Food' ? '🍱' : cat === 'Transport' ? '⛽' : cat === 'Shopping' ? '📦' : '💰'}
+                    return (
+                      <div key={cat} className="space-y-2">
+                        <div className="flex justify-between items-center text-xs">
+                          <div className="flex items-center gap-1.5 font-bold text-stone-700">
+                            <span>
+                              {cat === 'Food' ? '🍱' : cat === 'Transport' ? '⛽' : cat === 'Shopping' ? '📦' : '💰'}
+                            </span>
+                            <span>{cat === 'Food' ? (isId ? 'Makanan' : 'Food') : cat === 'Transport' ? (isId ? 'Transportasi' : 'Transport') : cat === 'Shopping' ? (isId ? 'Belanja' : 'Shopping') : (isId ? 'Tabungan' : 'Savings')}</span>
+                          </div>
+                          <span className={cn("text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider", textBadgeColor)}>
+                            {pct}% {pct >= 100 ? (isId ? 'Terlampaui' : 'Overspent') : ''}
                           </span>
-                          <span>{cat === 'Food' ? (isId ? 'Makanan' : 'Food') : cat === 'Transport' ? (isId ? 'Transportasi' : 'Transport') : cat === 'Shopping' ? (isId ? 'Belanja' : 'Shopping') : (isId ? 'Tabungan' : 'Savings')}</span>
                         </div>
-                        <span className={cn("text-[9px] font-extrabold uppercase px-2 py-0.5 rounded-full tracking-wider", textBadgeColor)}>
-                          {pct}% {pct >= 100 ? (isId ? 'Terlampaui' : 'Overspent') : ''}
-                        </span>
-                      </div>
-                      
-                      <div className="h-3 w-full bg-stone-100 rounded-full overflow-hidden relative">
-                        <motion.div 
-                          initial={{ width: 0 }}
-                          animate={{ width: `${Math.min(100, pct)}%` }}
-                          transition={{ type: 'spring' as const, stiffness: 60, damping: 12 }}
-                          className={cn("h-full rounded-full transition-all", progressColor)}
-                        />
-                      </div>
+                        
+                        <div className="h-3 w-full bg-stone-100 rounded-full overflow-hidden relative">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${Math.min(100, pct)}%` }}
+                            transition={{ type: 'spring' as const, stiffness: 60, damping: 12 }}
+                            className={cn("h-full rounded-full transition-all", progressColor)}
+                          />
+                        </div>
 
-                      <div className="flex justify-between items-center text-[10px] font-bold text-stone-400">
-                        <span>{hideBalances ? '••••••' : formatCurrency(spent, family?.currency)} {isId ? 'terpakai' : 'spent'}</span>
-                        <span>{isId ? 'Pagu' : 'Limit'} {hideBalances ? '••••••' : formatCurrency(limit, family?.currency)}</span>
+                        <div className="flex justify-between items-center text-[10px] font-bold text-stone-400">
+                          <span>{hideBalances ? '••••••' : formatCurrency(spent, family?.currency)} {isId ? 'terpakai' : 'spent'}</span>
+                          <span>{isId ? 'Pagu' : 'Limit'} {hideBalances ? '••••••' : formatCurrency(limit, family?.currency)}</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ) : (
-            <div 
-              onClick={() => setIsSettingsOpen(true)}
-              className="bg-white border border-dashed border-stone-200 rounded-[2.5rem] p-7 text-center space-y-3 cursor-pointer hover:border-orange-200 transition-all active:scale-[0.99] group"
-            >
-              <div className="w-12 h-12 bg-orange-50 text-orange-400 rounded-2xl flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
-                <span>🛡️</span>
+            ) : (
+              <div 
+                onClick={() => setIsSettingsOpen(true)}
+                className="bg-white border border-dashed border-stone-200 rounded-[2.5rem] p-7 text-center space-y-3 cursor-pointer hover:border-orange-200 transition-all active:scale-[0.99] group"
+              >
+                <div className="w-12 h-12 bg-orange-50 text-orange-400 rounded-2xl flex items-center justify-center mx-auto group-hover:scale-110 transition-transform">
+                  <span>🛡️</span>
+                </div>
+                <div className="space-y-1">
+                  <h4 className="font-bold text-stone-700 text-sm">{isId ? 'Anggaran Belum Dipagari' : 'Budget Unprotected'}</h4>
+                  <p className="text-xs text-stone-400 max-w-[320px] mx-auto leading-relaxed">
+                    {isId 
+                      ? 'Atur batas anggaran kategori di Pengaturan untuk mencegah kebocoran pengeluaran secara visual.' 
+                      : 'Set category budget caps in Settings to prevent accidental overspending with dynamic indicators.'}
+                  </p>
+                </div>
               </div>
-              <div className="space-y-1">
-                <h4 className="font-bold text-stone-700 text-sm">{isId ? 'Anggaran Belum Dipagari' : 'Budget Unprotected'}</h4>
-                <p className="text-xs text-stone-400 max-w-[320px] mx-auto leading-relaxed">
-                  {isId 
-                    ? 'Atur batas anggaran kategori di Pengaturan untuk mencegah kebocoran pengeluaran secara visual.' 
-                    : 'Set category budget caps in Settings to prevent accidental overspending with dynamic indicators.'}
-                </p>
-              </div>
-            </div>
-          )}
-        </motion.section>
+            )}
+          </motion.section>
+        )}
 
         {/* Premium AI Financial Suite */}
-        <motion.section variants={itemVariants} className="space-y-4">
-          <div>
-            <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{t('premium_suite')}</h3>
-            <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{t('advanced_features')}</p>
-          </div>
-          
-          <div className="grid grid-cols-2 gap-4">
-            <button 
-              id="btn-ai-advisor"
-              onClick={() => setIsAiAdvisorOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
-            >
-              <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-indigo-50/50 rounded-full group-hover:scale-110 transition-transform" />
-              <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 w-max"><Sparkles size={18} /></div>
-              <div>
-                <h4 className="font-bold text-stone-800 text-xs">{t('ai_advisor')}</h4>
-                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('empathetic_advisor')}</p>
-              </div>
-            </button>
+        {!isChild && (
+          <motion.section variants={itemVariants} className="space-y-4">
+            <div>
+              <h3 className="font-brand font-bold text-stone-800 text-lg tracking-tight">{t('premium_suite')}</h3>
+              <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{t('advanced_features')}</p>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <button 
+                id="btn-ai-advisor"
+                onClick={() => setIsAiAdvisorOpen(true)}
+                className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
+              >
+                <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-indigo-50/50 rounded-full group-hover:scale-110 transition-transform" />
+                <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 w-max"><Sparkles size={18} /></div>
+                <div>
+                  <h4 className="font-bold text-stone-800 text-xs">{t('ai_advisor')}</h4>
+                  <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('empathetic_advisor')}</p>
+                </div>
+              </button>
 
-            <button 
-              id="btn-debt-tracker"
-              onClick={() => setIsDebtTrackerOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-rose-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
-            >
-              <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-rose-50/50 rounded-full group-hover:scale-110 transition-transform" />
-              <div className="p-3 bg-rose-50 rounded-2xl text-rose-600 w-max"><TrendingDown size={18} /></div>
-              <div>
-                <h4 className="font-bold text-stone-800 text-xs">{t('debt_tracker')}</h4>
-                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('fixed_floating_loans')}</p>
-              </div>
-            </button>
+              <button 
+                id="btn-debt-tracker"
+                onClick={() => setIsDebtTrackerOpen(true)}
+                className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-rose-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
+              >
+                <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-rose-50/50 rounded-full group-hover:scale-110 transition-transform" />
+                <div className="p-3 bg-rose-50 rounded-2xl text-rose-600 w-max"><TrendingDown size={18} /></div>
+                <div>
+                  <h4 className="font-bold text-stone-800 text-xs">{t('debt_tracker')}</h4>
+                  <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('fixed_floating_loans')}</p>
+                </div>
+              </button>
 
-            <button 
-              id="btn-credit-simulator"
-              onClick={() => setIsCreditSimOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-emerald-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
-            >
-              <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-emerald-50/50 rounded-full group-hover:scale-110 transition-transform" />
-              <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 w-max"><BarChart2 size={18} /></div>
-              <div>
-                <h4 className="font-bold text-stone-800 text-xs">{t('credit_simulator')}</h4>
-                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('kpr_vehicle_loans')}</p>
-              </div>
-            </button>
+              <button 
+                id="btn-credit-simulator"
+                onClick={() => setIsCreditSimOpen(true)}
+                className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-emerald-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
+              >
+                <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-emerald-50/50 rounded-full group-hover:scale-110 transition-transform" />
+                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600 w-max"><BarChart2 size={18} /></div>
+                <div>
+                  <h4 className="font-bold text-stone-800 text-xs">{t('credit_simulator')}</h4>
+                  <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('kpr_vehicle_loans')}</p>
+                </div>
+              </button>
 
-            <button 
-              id="btn-roadmap"
-              onClick={() => setIsRoadmapOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-amber-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
-            >
-              <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-amber-50/50 rounded-full group-hover:scale-110 transition-transform" />
-              <div className="p-3 bg-amber-50 rounded-2xl text-amber-600 w-max"><Compass size={18} /></div>
-              <div>
-                <h4 className="font-bold text-stone-800 text-xs">{t('roadmap')}</h4>
-                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('emergency_wealth_goals')}</p>
-              </div>
-            </button>
+              <button 
+                id="btn-roadmap"
+                onClick={() => setIsRoadmapOpen(true)}
+                className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-amber-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
+              >
+                <div className="absolute -right-6 -bottom-6 w-20 h-20 bg-amber-50/50 rounded-full group-hover:scale-110 transition-transform" />
+                <div className="p-3 bg-amber-50 rounded-2xl text-amber-600 w-max"><Compass size={18} /></div>
+                <div>
+                  <h4 className="font-bold text-stone-800 text-xs">{t('roadmap')}</h4>
+                  <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('emergency_wealth_goals')}</p>
+                </div>
+              </button>
 
-            <button 
-              id="btn-community-feed"
-              onClick={() => setIsCommunityOpen(true)}
-              className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden col-span-2 group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
-            >
-              <div className="absolute -right-8 -bottom-8 w-24 h-24 bg-indigo-50/50 rounded-full group-hover:scale-110 transition-transform" />
-              <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 w-max"><Users size={18} /></div>
-              <div>
-                <h4 className="font-bold text-stone-800 text-xs">{t('community')}</h4>
-                <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('share_wisdom_interact')}</p>
-              </div>
-            </button>
-          </div>
-        </motion.section>
+              <button 
+                id="btn-community-feed"
+                onClick={() => setIsCommunityOpen(true)}
+                className="p-5 rounded-[2rem] border border-stone-100 bg-white text-left shadow-sm hover:border-indigo-200 transition-all flex flex-col justify-between h-36 relative overflow-hidden col-span-2 group active:scale-98 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none"
+              >
+                <div className="absolute -right-8 -bottom-8 w-24 h-24 bg-indigo-50/50 rounded-full group-hover:scale-110 transition-transform" />
+                <div className="p-3 bg-indigo-50 rounded-2xl text-indigo-600 w-max"><Users size={18} /></div>
+                <div>
+                  <h4 className="font-bold text-stone-800 text-xs">{t('community')}</h4>
+                  <p className="text-[9px] text-stone-400 font-bold uppercase tracking-wider mt-0.5">{t('share_wisdom_interact')}</p>
+                </div>
+              </button>
+            </div>
+          </motion.section>
+        )}
 
         {/* Dynamic Activity Feed */}
         <motion.section variants={itemVariants} className="space-y-5">
@@ -1357,43 +1367,45 @@ const containerVariants = {
       </motion.main>
 
       {/* Floating Premium Navigation */}
-      <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-stone-900/90 backdrop-blur-2xl rounded-[2.5rem] p-3 flex justify-around items-center z-40 shadow-2xl border border-white/5">
-        <button 
-          id="btn-nav-dashboard"
-          aria-label="Dashboard Beranda / Home Dashboard"
-          className="relative group p-4 rounded-3xl bg-white/10 text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
-        >
-          <LayoutDashboard size={22} className="group-hover:scale-110" />
-          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full" />
-        </button>
-        <button 
-          id="btn-nav-analytics"
-          aria-label="Analisis Pengeluaran / Expense Analytics"
-          onClick={() => setIsAnalyticsOpen(true)} 
-          className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
-        >
-          <PieChart size={22} className="group-hover:scale-110" />
-        </button>
-        <div className="h-4 w-[1px] bg-stone-700/50 mx-2" />
-        <button 
-          id="btn-nav-goals"
-          aria-label="Target Keuangan / Financial Goals"
-          onClick={() => setIsGoalsOpen(true)} 
-          className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
-        >
-          <Target size={22} className="group-hover:scale-110" />
-        </button>
-        {isMarried && !isChild && (
+      {!isChild && (
+        <nav className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-md bg-stone-900/90 backdrop-blur-2xl rounded-[2.5rem] p-3 flex justify-around items-center z-40 shadow-2xl border border-white/5">
           <button 
-            id="btn-nav-kids"
-            aria-label="Modul Tabungan Anak / Kids Financial Kit"
-            onClick={() => setIsKidsModalOpen(true)} 
+            id="btn-nav-dashboard"
+            aria-label="Dashboard Beranda / Home Dashboard"
+            className="relative group p-4 rounded-3xl bg-white/10 text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
+          >
+            <LayoutDashboard size={22} className="group-hover:scale-110" />
+            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-white rounded-full" />
+          </button>
+          <button 
+            id="btn-nav-analytics"
+            aria-label="Analisis Pengeluaran / Expense Analytics"
+            onClick={() => setIsAnalyticsOpen(true)} 
             className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
           >
-            <Baby size={22} className="group-hover:scale-110" />
+            <PieChart size={22} className="group-hover:scale-110" />
           </button>
-        )}
-      </nav>
+          <div className="h-4 w-[1px] bg-stone-700/50 mx-2" />
+          <button 
+            id="btn-nav-goals"
+            aria-label="Target Keuangan / Financial Goals"
+            onClick={() => setIsGoalsOpen(true)} 
+            className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
+          >
+            <Target size={22} className="group-hover:scale-110" />
+          </button>
+          {isMarried && (
+            <button 
+              id="btn-nav-kids"
+              aria-label="Modul Tabungan Anak / Kids Financial Kit"
+              onClick={() => setIsKidsModalOpen(true)} 
+              className="group p-4 rounded-3xl text-stone-500 hover:text-white transition-all active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus:outline-none"
+            >
+              <Baby size={22} className="group-hover:scale-110" />
+            </button>
+          )}
+        </nav>
+      )}
 
       {/* Camera Overlay */}
       {isScannerOpen && (

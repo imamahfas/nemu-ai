@@ -21,6 +21,10 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
   const [limitShopping, setLimitShopping] = useState<number | string>('');
   const [limitSavings, setLimitSavings] = useState<number | string>('');
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Members & Roles management states
+  const [familyMembers, setFamilyMembers] = useState<any[]>([]);
+  const [isLoadingMembers, setIsLoadingMembers] = useState(false);
 
   useEffect(() => {
     if (family?.spaceType) setSpaceType(family.spaceType);
@@ -33,6 +37,45 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
       setLimitSavings(family.budgetLimits?.Savings ?? '');
     }
   }, [family, isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !family?.id) return;
+    
+    const fetchMembers = async () => {
+      setIsLoadingMembers(true);
+      try {
+        const q = query(collection(db, 'users'), where('familyId', '==', family.id));
+        const snap = await getDocs(q);
+        const membersList = snap.docs.map(doc => doc.data());
+        setFamilyMembers(membersList);
+      } catch (err) {
+        console.error("Failed to fetch family members:", err);
+      } finally {
+        setIsLoadingMembers(false);
+      }
+    };
+    
+    fetchMembers();
+  }, [isOpen, family?.id]);
+
+  const handleUpdateRole = async (targetUid: string, newRole: 'parent' | 'child') => {
+    const isId = i18n.language?.startsWith('id');
+    if (profile?.role !== 'parent') {
+      alert(isId ? "Hanya Orang Tua yang dapat mengubah peran!" : "Only Parents can change roles!");
+      return;
+    }
+    
+    try {
+      await updateDoc(doc(db, 'users', targetUid), {
+        role: newRole
+      });
+      setFamilyMembers(prev => prev.map(m => m.uid === targetUid ? { ...m, role: newRole } : m));
+      alert(isId ? "Peran berhasil diperbarui!" : "Role updated successfully!");
+    } catch (err: any) {
+      console.error("Failed to update role:", err);
+      alert((isId ? "Gagal memperbarui peran: " : "Failed to update role: ") + (err?.message || err));
+    }
+  };
 
   const handleToggleMode = (mode: string) => {
     setSpaceType(mode);
@@ -460,6 +503,60 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
                         </button>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Members & Roles */}
+                  <div className="space-y-4 pt-4 border-t border-stone-100">
+                    <div>
+                      <h3 className="font-bold text-stone-800 text-sm">{isId ? 'Anggota & Peran' : 'Members & Roles'}</h3>
+                      <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{isId ? 'Lihat anggota ruang dan kelola peran mereka' : 'View space members and manage their roles'}</p>
+                    </div>
+
+                    {isLoadingMembers ? (
+                      <div className="text-center py-4 text-xs text-stone-400 font-bold uppercase tracking-widest animate-pulse">
+                        {isId ? 'Memuat Anggota...' : 'Loading Members...'}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {familyMembers.map((member: any) => {
+                          const isSelf = member.uid === user?.uid;
+                          const memberRole = member.role || 'parent';
+                          
+                          return (
+                            <div key={member.uid} className="flex items-center justify-between p-3 bg-stone-50 rounded-2xl border border-stone-100/50">
+                              <div className="flex items-center gap-3">
+                                {member.photoURL ? (
+                                  <img src={member.photoURL} alt={member.displayName} className="w-9 h-9 rounded-full object-cover border border-stone-200" />
+                                ) : (
+                                  <div className="w-9 h-9 rounded-full bg-stone-200 flex items-center justify-center font-bold text-stone-600 text-sm">
+                                    {member.displayName?.substring(0, 1).toUpperCase() || 'U'}
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-xs font-bold text-stone-800">
+                                    {member.displayName} {isSelf && <span className="text-[9px] text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded-full font-bold ml-1">{isId ? 'Saya' : 'Me'}</span>}
+                                  </p>
+                                  <p className="text-[9px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">
+                                    {memberRole === 'parent' ? (isId ? 'Orang Tua' : 'Parent') : (isId ? 'Anak' : 'Child')}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              {!isSelf && profile?.role === 'parent' && (
+                                <select
+                                  value={memberRole}
+                                  onChange={(e) => handleUpdateRole(member.uid, e.target.value as 'parent' | 'child')}
+                                  className="text-xs bg-white border border-stone-200 rounded-xl px-2.5 py-1.5 font-bold text-stone-700 focus:outline-none focus:ring-1 focus:ring-stone-400"
+                                >
+                                  <option value="parent">{isId ? 'Orang Tua' : 'Parent'}</option>
+                                  <option value="child">{isId ? 'Anak (Child)' : 'Child'}</option>
+                                </select>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
                   {/* Join Space */}
