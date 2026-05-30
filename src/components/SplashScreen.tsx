@@ -61,18 +61,10 @@ export function SplashScreen({
       transition={{ duration: 0.5, ease: [0.4, 0, 0.2, 1] }}
       className="fixed inset-0 z-[9999] bg-[#fdfcfb] flex flex-col items-center justify-between p-12 overflow-hidden text-stone-900"
     >
-      {/* Animated Pastels in Background */}
-      <div className="absolute inset-0 opacity-40 pointer-events-none overflow-hidden">
-        <motion.div 
-          animate={{ scale: [1, 1.15, 1], rotate: [0, 8, 0] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute top-[-10%] left-[-15%] w-[70%] h-[70%] bg-gradient-to-br from-orange-100/50 to-transparent blur-[100px] rounded-full" 
-        />
-        <motion.div 
-          animate={{ scale: [1, 1.2, 1], rotate: [0, -8, 0] }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-          className="absolute bottom-[-10%] right-[-15%] w-[70%] h-[70%] bg-gradient-to-br from-emerald-100/50 to-transparent blur-[100px] rounded-full" 
-        />
+      {/* Decorative Pastel Background */}
+      <div className="absolute inset-0 opacity-30 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-10%] left-[-15%] w-[70%] h-[70%] bg-gradient-to-br from-orange-100/40 to-transparent blur-[80px] rounded-full" />
+        <div className="absolute bottom-[-10%] right-[-15%] w-[70%] h-[70%] bg-gradient-to-br from-emerald-100/40 to-transparent blur-[80px] rounded-full" />
       </div>
 
       {/* Spacing dummy */}

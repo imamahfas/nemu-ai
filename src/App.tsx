@@ -34,18 +34,10 @@ function LoginPage() {
   
   return (
     <div className="min-h-screen bg-[#fdfcfb] flex flex-col items-center justify-center p-8 text-stone-900 overflow-hidden relative">
-      {/* Dynamic Background */}
-      <div className="absolute top-0 left-0 w-full h-full opacity-40 pointer-events-none overflow-hidden">
-        <motion.div 
-          animate={{ scale: [1, 1.2, 1], rotate: [0, 5, 0] }}
-          transition={{ duration: 15, repeat: Infinity, ease: "linear" }}
-          className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-gradient-to-br from-orange-100/50 to-transparent blur-[120px] rounded-full" 
-        />
-        <motion.div 
-          animate={{ scale: [1, 1.3, 1], rotate: [0, -5, 0] }}
-          transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
-          className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] bg-gradient-to-br from-emerald-100/50 to-transparent blur-[120px] rounded-full" 
-        />
+      {/* Decorative Pastel Background */}
+      <div className="absolute top-0 left-0 w-full h-full opacity-30 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-20%] left-[-20%] w-[80%] h-[80%] bg-gradient-to-br from-orange-100/40 to-transparent blur-[80px] rounded-full" />
+        <div className="absolute bottom-[-20%] right-[-20%] w-[80%] h-[80%] bg-gradient-to-br from-emerald-100/40 to-transparent blur-[80px] rounded-full" />
       </div>
 
       <div className="absolute top-8 right-8 z-20">
