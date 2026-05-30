@@ -7,7 +7,7 @@ interface AuthContextType {
   user: User | null;
   profile: any | null;
   loading: boolean;
-  signIn: () => Promise<void>;
+  signIn: (forceSelectAccount?: boolean) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -158,8 +158,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return unsubscribe;
   }, []);
 
-  const signIn = async () => {
+  const signIn = async (forceSelectAccount = false) => {
     try {
+      if (forceSelectAccount) {
+        googleProvider.setCustomParameters({ prompt: 'select_account' });
+      } else {
+        googleProvider.setCustomParameters({});
+      }
       await signInWithPopup(auth, googleProvider);
     } catch (error: any) {
       console.error('Sign in error', error?.message || error);

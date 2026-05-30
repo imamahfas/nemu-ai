@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, TrendingDown, Plus, CreditCard, Calendar, BarChart2, DollarSign } from 'lucide-react';
 import { formatCurrency, formatNumberInput } from '../lib/utils';
 import { useTranslation } from 'react-i18next';

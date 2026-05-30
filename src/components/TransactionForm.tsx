@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, TrendingUp, TrendingDown, Store, Tag } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { addTransaction, TransactionData } from '../lib/transactionService';
 import { formatNumberInput } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 interface TransactionFormProps {
   isOpen: boolean;
@@ -19,11 +20,13 @@ const CATEGORIES = [
 
 export function TransactionForm({ isOpen, onClose, userId, familyId, initialData }: TransactionFormProps) {
   const { t, i18n } = useTranslation();
+  const { user, profile } = useAuth();
   const [type, setType] = useState<'expense' | 'income'>('expense');
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [category, setCategory] = useState('Food');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [items, setItems] = useState<any[]>([]);
 
   // Auto-fill if initialData is provided
   useEffect(() => {
@@ -31,6 +34,13 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
       setType('expense'); // Receipts are usually expenses
       if (initialData.Total) setAmount(initialData.Total.toString());
       if (initialData['Store Name']) setDescription(initialData['Store Name']);
+      
+      // Load parsed items from OCR
+      if (initialData.Items) {
+        setItems(initialData.Items);
+      } else {
+        setItems([]);
+      }
       
       // Use AI Category if provided, otherwise basic auto-categorization
       if (initialData.Category && CATEGORIES.includes(initialData.Category)) {
@@ -47,12 +57,18 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
       setAmount('');
       setDescription('');
       setCategory('Food');
+      setItems([]);
     }
   }, [initialData, isOpen]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!amount || !description) return;
+
+    if (profile?.role === 'child') {
+      alert(i18n.language.startsWith('id') ? "Akun anak tidak memiliki izin untuk menambah transaksi." : "Kid accounts are not permitted to add transactions.");
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -61,7 +77,9 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
         type,
         description,
         category,
-        date: new Date().toISOString()
+        date: new Date().toISOString(),
+        items: items.length > 0 ? items : undefined,
+        createdBy: profile?.displayName || user?.displayName || 'User'
       };
       
       await addTransaction(userId, familyId, data);
@@ -190,6 +208,30 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
                   </div>
                 </div>
               </div>
+ 
+              {/* Parsed Items Breakdown */}
+              {items.length > 0 && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-stone-400 uppercase tracking-widest ml-1">
+                    {i18n.language.startsWith('id') ? 'Item Belanjaan' : 'Scanned Items'}
+                  </label>
+                  <div className="bg-stone-50 border border-stone-100 rounded-2xl p-4 max-h-40 overflow-y-auto space-y-2.5 scrollbar-hide">
+                    {items.map((item, index) => (
+                      <div key={index} className="flex justify-between items-center text-xs">
+                        <div className="flex-1 pr-2">
+                          <p className="font-bold text-stone-700">{item.Name}</p>
+                          <p className="text-[10px] text-stone-400 font-bold uppercase mt-0.5">
+                            {item.Qty} × Rp {formatNumberInput(item.Price.toString())}
+                          </p>
+                        </div>
+                        <div className="text-right font-brand font-bold text-stone-700">
+                          Rp {formatNumberInput((item.Qty * item.Price).toString())}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <button 
                 type="submit"

@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { Camera, RefreshCw, X, Download } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
 
@@ -79,7 +79,7 @@ export function CameraScanner({ onScanComplete, onClose }: {
       // Remove data:image/jpeg;base64, prefix
       const data = base64Data.split(',')[1];
       
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
       const res = await fetch(url, {
         method: 'POST',
         headers: {

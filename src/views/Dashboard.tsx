@@ -18,12 +18,16 @@ import {
   BarChart2,
   X,
   Eye,
-  EyeOff
+  EyeOff,
+  Settings,
+  RefreshCw,
+  User,
+  Heart
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { db } from '../lib/firebase';
-import { doc, onSnapshot, collection, query, where, limit, orderBy, updateDoc } from 'firebase/firestore';
+import { doc, onSnapshot, collection, query, where, limit, orderBy, updateDoc, getDoc, getDocs, arrayUnion, setDoc } from 'firebase/firestore';
 import { formatCurrency, cn } from '../lib/utils';
 import { CameraScanner } from '../components/CameraScanner';
 import { useTranslation } from 'react-i18next';
@@ -45,11 +49,19 @@ import { FirestoreSchema } from '../lib/firestoreSchema';
 import { HealthDetailModal } from '../components/HealthDetailModal';
 
 export default function Dashboard() {
-  const { user, profile, loading: authLoading, logout } = useAuth();
+  const { user, profile, loading: authLoading, signIn, logout } = useAuth();
   const { t, i18n } = useTranslation();
   const isId = i18n.language?.startsWith('id');
   const [family, setFamily] = useState<any>(null);
   const [recentTransactions, setRecentTransactions] = useState<any[]>([]);
+  const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
+
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+
+  // Pending Invite Modal states
+  const [pendingInviteCode, setPendingInviteCode] = useState<string | null>(null);
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
+  const [isJoiningInvite, setIsJoiningInvite] = useState(false);
 
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isTxFormOpen, setIsTxFormOpen] = useState(false);
@@ -192,6 +204,118 @@ export default function Dashboard() {
     });
   };
 
+  const handleSwitchSpace = async (targetSpaceType: 'personal' | 'unmarried' | 'married') => {
+    if (!user || !profile) return;
+    
+    const activePersonalId = profile.personalSpaceId || `personal_${user.uid}`;
+    const activeCoupleId = profile.coupleSpaceId || `couple_${user.uid}`;
+    const activeFamilyId = profile.familySpaceId || `family_${user.uid}`;
+
+    let activeSpaceId = '';
+    if (targetSpaceType === 'personal') {
+      activeSpaceId = activePersonalId;
+    } else if (targetSpaceType === 'unmarried') {
+      activeSpaceId = activeCoupleId;
+    } else {
+      activeSpaceId = activeFamilyId;
+    }
+    
+    try {
+      await updateDoc(doc(db, 'users', user.uid), {
+        familyId: activeSpaceId
+      });
+      window.location.reload();
+    } catch (err) {
+      console.error("Failed to switch space:", err);
+      alert(isId ? "Gagal beralih ruang." : "Failed to switch space.");
+    }
+  };
+
+  const handleSwitchAccount = async () => {
+    try {
+      await logout();
+      setTimeout(async () => {
+        await signIn(true);
+      }, 300);
+    } catch (err) {
+      console.error("Failed to switch account:", err);
+    }
+  };
+
+  const handleConfirmInviteJoin = async () => {
+    if (!pendingInviteCode || !user || !profile) return;
+    setIsJoiningInvite(true);
+    
+    try {
+      const q = query(collection(db, 'families'), where('inviteCode', '==', pendingInviteCode.trim().toUpperCase()));
+      const querySnapshot = await getDocs(q);
+
+      if (querySnapshot.empty) {
+        alert(isId ? "Kode undangan tidak valid." : "Invalid invite code.");
+        setIsInviteModalOpen(false);
+        setPendingInviteCode(null);
+        setIsJoiningInvite(false);
+        return;
+      }
+
+      const newFamilyDoc = querySnapshot.docs[0];
+      const newFamilyId = newFamilyDoc.id;
+      const newFamilyData = newFamilyDoc.data();
+      const targetSpaceType = newFamilyData.spaceType || 'unmarried';
+
+      if (newFamilyId === profile?.familyId) {
+        alert(isId ? "Anda sudah berada di dalam ruang ini." : "You are already in this space.");
+        setIsInviteModalOpen(false);
+        setPendingInviteCode(null);
+        setIsJoiningInvite(false);
+        return;
+      }
+
+      // Add user to new family members
+      await updateDoc(doc(db, 'families', newFamilyId), {
+        members: arrayUnion(user.uid)
+      });
+
+      // Update user profile to new familyId and save specific space reference
+      const profileUpdates: any = { 
+        familyId: newFamilyId,
+        role: 'parent' 
+      };
+
+      if (targetSpaceType === 'unmarried') {
+        profileUpdates.coupleSpaceId = newFamilyId;
+      } else if (targetSpaceType === 'married') {
+        profileUpdates.familySpaceId = newFamilyId;
+      } else {
+        profileUpdates.personalSpaceId = newFamilyId;
+      }
+
+      await setDoc(doc(db, 'users', user.uid), profileUpdates, { merge: true });
+
+      alert(isId ? "Berhasil bergabung ke ruang! Memuat ulang..." : "Successfully joined the space! Reloading...");
+      window.location.reload();
+    } catch (error: any) {
+      console.error(error);
+      alert(isId ? `Gagal bergabung ke ruang: ${error?.message || error}` : `Error joining space: ${error?.message || error}`);
+    } finally {
+      setIsJoiningInvite(false);
+    }
+  };
+
+  useEffect(() => {
+    if (authLoading) return;
+    const params = new URLSearchParams(window.location.search);
+    const inviteParam = params.get('invite');
+    if (inviteParam && user && profile) {
+      // Clean up the URL query parameter so it doesn't trigger repeatedly on reload
+      const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+      window.history.replaceState({ path: cleanUrl }, '', cleanUrl);
+      
+      setPendingInviteCode(inviteParam.trim().toUpperCase());
+      setIsInviteModalOpen(true);
+    }
+  }, [user, profile, authLoading]);
+
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'id' ? 'en' : 'id');
   };
@@ -212,10 +336,10 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (recentTransactions.length > 0 && !aiAdvice) {
+    if (recentTransactions.length > 0) {
       loadAiAdvice();
     }
-  }, [recentTransactions, aiAdvice]);
+  }, [recentTransactions, i18n.language]);
 
   useEffect(() => {
     if (authLoading) return;
@@ -288,10 +412,35 @@ export default function Dashboard() {
       where('familyId', '==', profile.familyId),
       limit(100)
     );
-    const unsubTransactions = onSnapshot(q, (snapshot) => {
+    const unsubTransactions = onSnapshot(q, async (snapshot) => {
       const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       docs.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
       setRecentTransactions(docs);
+
+      // Auto-heal empty totalBalance when history exists!
+      if (docs.length > 0 && profile?.familyId) {
+        const calculatedBalance = docs.reduce((sum, tx: any) => {
+          return sum + (tx.type === 'income' ? tx.amount : -tx.amount);
+        }, 0);
+
+        try {
+          const familyRef = doc(db, 'families', profile.familyId);
+          const currentFamilySnap = await getDoc(familyRef);
+          if (currentFamilySnap.exists()) {
+            const currentBal = currentFamilySnap.data()?.totalBalance ?? 0;
+            // If the Firestore balance is 0 but calculated balance is different, heal it!
+            if (currentBal === 0 && calculatedBalance !== 0) {
+              console.log(`Auto-healing family totalBalance: resetting from 0 to calculated balance ${calculatedBalance}`);
+              await updateDoc(familyRef, { 
+                totalBalance: calculatedBalance,
+                updatedAt: new Date().toISOString()
+              });
+            }
+          }
+        } catch (err) {
+          console.error("Auto-heal failed:", err);
+        }
+      }
     }, (error) => {
       console.error("Dashboard error loading transactions:", error);
       handleFirestoreError(error, OperationType.LIST, txPath);
@@ -382,26 +531,209 @@ const containerVariants = {
             <Languages size={18} />
             <span className="text-xs font-bold uppercase tracking-tight">{i18n.language}</span>
           </button>
-          <div className="relative group">
-            <img 
-              id="btn-profile-settings"
-              role="button"
-              tabIndex={0}
-              aria-label="Buka Pengaturan Profil / Open Profile Settings"
-              onClick={() => setIsSettingsOpen(true)}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') setIsSettingsOpen(true); }}
-              src={user?.photoURL || ''} 
-              alt="Profile" 
-              className="w-11 h-11 rounded-2xl border-2 border-stone-100 shadow-sm cursor-pointer transition-transform group-hover:scale-105 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-stone-900 focus:outline-none" 
-            />
-            <button 
-              id="btn-logout"
-              aria-label="Logout"
-              onClick={logout}
-              className="absolute -top-1 -right-1 bg-white p-1 rounded-full border border-stone-100 shadow-sm opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-rose-500 focus-visible:ring-2 focus-visible:ring-stone-900 focus:outline-none"
+          <div className="relative">
+            <button
+              id="btn-profile-menu"
+              aria-expanded={isUserMenuOpen}
+              aria-haspopup="true"
+              onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
+              className="relative group transition-transform active:scale-95 focus:outline-none flex-shrink-0"
             >
-              <LogOut size={12} />
+              <img 
+                src={user?.photoURL || ''} 
+                alt="Profile" 
+                className="w-11 h-11 rounded-2xl border-2 border-stone-100 shadow-sm transition-all hover:border-orange-200" 
+              />
+              <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full shadow-sm animate-pulse" />
             </button>
+
+            {isUserMenuOpen && (
+              <>
+                {/* Click outside overlay to close */}
+                <div 
+                  className="fixed inset-0 z-40 bg-transparent" 
+                  onClick={() => setIsUserMenuOpen(false)} 
+                />
+                
+                {/* Dropdown Card */}
+                <div 
+                  className="absolute right-0 mt-3 w-72 bg-white/95 backdrop-blur-xl border border-stone-100 rounded-3xl shadow-2xl p-4.5 z-50 animate-in fade-in slide-in-from-top-3 duration-200"
+                  role="menu"
+                >
+                  {/* User Profile Info Summary */}
+                  <div className="flex items-center gap-3 pb-3.5 border-b border-stone-100">
+                    <img 
+                      src={user?.photoURL || ''} 
+                      alt="Profile" 
+                      className="w-10 h-10 rounded-xl border border-stone-50" 
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-brand font-bold text-stone-900 text-sm truncate">{profile?.displayName || user?.displayName || 'User'}</p>
+                      <p className="text-[10px] text-stone-400 font-medium truncate mt-0.5">{user?.email}</p>
+                    </div>
+                  </div>
+
+                  {/* Quick Space Switcher Section */}
+                  <div className="py-3.5 space-y-2.5">
+                    <p className="text-[9px] font-bold text-stone-400 uppercase tracking-widest px-1">
+                      {isId ? 'Pilih Ruang Finansial' : 'Switch Financial Space'}
+                    </p>
+                    
+                    <div className="space-y-1.5">
+                      {/* Personal Space Button */}
+                      <button
+                        onClick={() => { handleSwitchSpace('personal'); setIsUserMenuOpen(false); }}
+                        className={cn(
+                          "w-full flex items-center justify-between p-2 rounded-2xl transition-all text-left border",
+                          family?.spaceType === 'personal'
+                            ? "bg-indigo-50/40 border-indigo-100/50 text-indigo-900"
+                            : "bg-transparent border-transparent hover:bg-stone-50/80 text-stone-700"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "p-2 rounded-xl transition-colors",
+                            family?.spaceType === 'personal' ? "bg-indigo-100/60 text-indigo-600" : "bg-stone-50 text-stone-400"
+                          )}>
+                            <User size={15} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{t('personal_space')}</p>
+                            <p className="text-[8px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">{isId ? 'Ledger Mandiri' : 'Self Ledger'}</p>
+                          </div>
+                        </div>
+                        {family?.spaceType === 'personal' && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mr-2" />
+                        )}
+                      </button>
+
+                      {/* Couple Space Button */}
+                      <button
+                        onClick={() => { handleSwitchSpace('unmarried'); setIsUserMenuOpen(false); }}
+                        className={cn(
+                          "w-full flex items-center justify-between p-2 rounded-2xl transition-all text-left border",
+                          family?.spaceType === 'unmarried'
+                            ? "bg-emerald-50/40 border-emerald-100/50 text-emerald-900"
+                            : "bg-transparent border-transparent hover:bg-stone-50/80 text-stone-700"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "p-2 rounded-xl transition-colors",
+                            family?.spaceType === 'unmarried' ? "bg-emerald-100/60 text-emerald-600" : "bg-stone-50 text-stone-400"
+                          )}>
+                            <Heart size={15} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{t('couple_space')}</p>
+                            <p className="text-[8px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">{isId ? 'Target Pasangan' : 'Joint Goals'}</p>
+                          </div>
+                        </div>
+                        {family?.spaceType === 'unmarried' && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mr-2" />
+                        )}
+                      </button>
+
+                      {/* Family Space Button */}
+                      <button
+                        onClick={() => { handleSwitchSpace('married'); setIsUserMenuOpen(false); }}
+                        className={cn(
+                          "w-full flex items-center justify-between p-2 rounded-2xl transition-all text-left border",
+                          family?.spaceType === 'married'
+                            ? "bg-orange-50/40 border-orange-100/50 text-orange-950"
+                            : "bg-transparent border-transparent hover:bg-stone-50/80 text-stone-700"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "p-2 rounded-xl transition-colors",
+                            family?.spaceType === 'married' ? "bg-orange-100/60 text-orange-600" : "bg-stone-50 text-stone-400"
+                          )}>
+                            <Users size={15} />
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{t('family_space')}</p>
+                            <p className="text-[8px] font-bold text-stone-400 uppercase tracking-wider mt-0.5">{isId ? 'Keluarga & Anak' : 'Pro Family Ledger'}</p>
+                          </div>
+                        </div>
+                        {family?.spaceType === 'married' && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-orange-400 mr-2" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Actions Section */}
+                  <div className="pt-2.5 border-t border-stone-100 space-y-1">
+                    {/* Role Switcher Action */}
+                    <button
+                      onClick={async () => {
+                        const newRole = profile?.role === 'child' ? 'parent' : 'child';
+                        try {
+                          await updateDoc(doc(db, 'users', user.uid), { role: newRole });
+                          if (profile) profile.role = newRole;
+                          setIsUserMenuOpen(false);
+                          alert(isId 
+                            ? `Peran diubah menjadi: ${newRole === 'parent' ? 'Orang Tua' : 'Anak'}` 
+                            : `Role switched to: ${newRole === 'parent' ? 'Parent' : 'Kid'}`);
+                          window.location.reload();
+                        } catch (err) {
+                          console.error("Failed to switch role:", err);
+                        }
+                      }}
+                      className="w-full flex items-center gap-3 p-2 rounded-2xl text-stone-600 hover:text-stone-900 hover:bg-stone-50/80 text-left transition-all text-xs font-bold"
+                    >
+                      <div className="bg-stone-50 text-stone-500 rounded-lg flex items-center justify-center text-xs w-7 h-7 flex-shrink-0">
+                        {profile?.role === 'child' ? '👑' : '🧒'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-stone-855 truncate">
+                          {isId ? 'Ubah Peran Akun' : 'Switch User Role'}
+                        </p>
+                        <p className="text-[8px] text-stone-400 font-bold uppercase tracking-wider mt-0.5 truncate">
+                          {isId ? `Aktif: ${profile?.role === 'child' ? 'Anak' : 'Orang Tua'}` : `Active: ${profile?.role === 'child' ? 'Kid' : 'Parent'}`}
+                        </p>
+                      </div>
+                    </button>
+
+                    {/* Settings Modal Trigger */}
+                    {!isChild && (
+                      <button
+                        onClick={() => { setIsSettingsOpen(true); setIsUserMenuOpen(false); }}
+                        className="w-full flex items-center gap-3 p-2 rounded-2xl text-stone-600 hover:text-stone-900 hover:bg-stone-50/80 text-left transition-all text-xs font-bold"
+                      >
+                        <div className="p-1.5 bg-stone-50 text-stone-400 rounded-lg flex items-center justify-center w-7 h-7 flex-shrink-0">
+                          <Settings size={13} />
+                        </div>
+                        {isId ? 'Pengaturan Ruang' : 'Space Config & Invite'}
+                      </button>
+                    )}
+
+                    {/* Switch Account (Google Chooser) */}
+                    <button
+                      onClick={handleSwitchAccount}
+                      className="w-full flex items-center gap-3 p-2 rounded-2xl text-stone-600 hover:text-stone-900 hover:bg-stone-50/80 text-left transition-all text-xs font-bold"
+                    >
+                      <div className="p-1.5 bg-stone-50 text-stone-400 rounded-lg flex items-center justify-center w-7 h-7 flex-shrink-0">
+                        <RefreshCw size={13} />
+                      </div>
+                      {isId ? 'Ganti Akun Google' : 'Switch Google Account'}
+                    </button>
+
+                    {/* Log Out */}
+                    <button
+                      onClick={logout}
+                      className="w-full flex items-center gap-3 p-2 rounded-2xl text-rose-600 hover:bg-rose-50 text-left transition-all text-xs font-bold"
+                    >
+                      <div className="p-1.5 bg-rose-50 text-rose-500 rounded-lg flex items-center justify-center w-7 h-7 flex-shrink-0">
+                        <LogOut size={13} />
+                      </div>
+                      {isId ? 'Keluar Aplikasi' : 'Log Out / Sign Out'}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </header>
@@ -460,23 +792,34 @@ const containerVariants = {
               </div>
             </div>
 
-            <div className="flex gap-4 relative z-10">
-              <button 
-                id="btn-add-income"
-                onClick={() => { setScannerData(null); setIsTxFormOpen(true); }}
-                className="flex-1 h-14 bg-white text-stone-900 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-50 transition-all active:scale-95 shadow-lg shadow-black/20 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus:outline-none"
-              >
-                <Plus size={20} /> {t('add_income')}
-              </button>
-              <button 
-                id="btn-scan-receipt"
-                aria-label="Scan struk belanja dengan kamera / Scan receipt with camera"
-                onClick={() => setIsScannerOpen(true)}
-                className="w-14 h-14 bg-stone-800 text-white rounded-2xl flex items-center justify-center border border-stone-700 hover:bg-stone-700 transition-all active:scale-95 shadow-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus:outline-none"
-              >
-                <Camera size={20} />
-              </button>
-            </div>
+            {isChild ? (
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-3 relative z-10 text-left">
+                <span className="text-xl flex-shrink-0">🧒</span>
+                <p className="text-stone-300 text-xs font-semibold leading-normal">
+                  {isId 
+                    ? 'Mode Anak Aktif: Anda dapat memantau saldo, melihat riwayat transaksi, dan mengerjakan tugas Chores di modul anak.' 
+                    : 'Kid Mode Active: You can monitor balances, view transaction logs, and claim chore tasks in the Kids Kit.'}
+                </p>
+              </div>
+            ) : (
+              <div className="flex gap-4 relative z-10">
+                <button 
+                  id="btn-add-income"
+                  onClick={() => { setScannerData(null); setIsTxFormOpen(true); }}
+                  className="flex-1 h-14 bg-white text-stone-900 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-50 transition-all active:scale-95 shadow-lg shadow-black/20 focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus:outline-none"
+                >
+                  <Plus size={20} /> {t('add_income')}
+                </button>
+                <button 
+                  id="btn-scan-receipt"
+                  aria-label="Scan struk belanja dengan kamera / Scan receipt with camera"
+                  onClick={() => setIsScannerOpen(true)}
+                  className="w-14 h-14 bg-stone-800 text-white rounded-2xl flex items-center justify-center border border-stone-700 hover:bg-stone-700 transition-all active:scale-95 shadow-lg focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-white focus:outline-none"
+                >
+                  <Camera size={20} />
+                </button>
+              </div>
+            )}
           </div>
         </motion.div>
 
@@ -784,26 +1127,55 @@ const containerVariants = {
                 initial={{ opacity: 0, x: -10 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: idx * 0.1 }}
-                className="bg-white p-5 rounded-[2rem] border border-stone-100 flex items-center gap-5 hover:border-orange-200 transition-all cursor-pointer shadow-sm active:scale-[0.99]"
+                onClick={() => tx.items && setExpandedTxId(expandedTxId === tx.id ? null : tx.id)}
+                className={cn(
+                  "bg-white p-5 rounded-[2rem] border border-stone-100 flex flex-col gap-4 hover:border-orange-200 transition-all shadow-sm",
+                  tx.items ? "cursor-pointer active:scale-[0.99]" : ""
+                )}
               >
-                <div className={cn(
-                  "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner",
-                  tx.type === 'expense' ? "bg-rose-50/50" : "bg-emerald-50/50"
-                )}>
-                  {tx.category === 'Food' ? '🍱' : tx.category === 'Transport' ? '⛽' : '📦'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-bold text-stone-800 truncate mb-0.5">{tx.description}</p>
-                  <p className="text-stone-400 text-xs font-bold uppercase tracking-tighter">{tx.category} • {new Date(tx.date).toLocaleDateString()}</p>
-                </div>
-                <div className="text-right">
-                  <p className={cn(
-                    "text-lg font-brand font-bold",
-                    tx.type === 'expense' ? "text-stone-800" : "text-emerald-600"
+                <div className="flex items-center gap-5 w-full">
+                  <div className={cn(
+                    "w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner flex-shrink-0",
+                    tx.type === 'expense' ? "bg-rose-50/50" : "bg-emerald-50/50"
                   )}>
-                    {tx.type === 'expense' ? '-' : '+'}{hideBalances ? '••••••' : formatCurrency(tx.amount, family?.currency)}
-                  </p>
+                    {tx.category === 'Food' ? '🍱' : tx.category === 'Transport' ? '⛽' : tx.category === 'Education' ? '📚' : '📦'}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-stone-800 truncate mb-0.5">{tx.description}</p>
+                    <p className="text-stone-400 text-xs font-bold uppercase tracking-tighter">
+                      {isId ? (tx.category === 'Food' ? 'Makanan' : tx.category === 'Transport' ? 'Transportasi' : tx.category === 'Shopping' ? 'Belanja' : tx.category) : tx.category} • {new Date(tx.date).toLocaleDateString()}
+                      {tx.createdBy && ` • ${isId ? 'oleh' : 'by'} ${tx.createdBy}`}
+                      {tx.items && ` • ${isId ? '🧾 Lihat Struk' : '🧾 View Items'}`}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className={cn(
+                      "text-lg font-brand font-bold",
+                      tx.type === 'expense' ? "text-stone-800" : "text-emerald-600"
+                    )}>
+                      {tx.type === 'expense' ? '-' : '+'}{hideBalances ? '••••••' : formatCurrency(tx.amount, family?.currency)}
+                    </p>
+                  </div>
                 </div>
+
+                {/* Expandable Items Details */}
+                {expandedTxId === tx.id && tx.items && (
+                  <div className="border-t border-dashed border-stone-200 pt-3 mt-1 space-y-2">
+                    {tx.items.map((item: any, itemIdx: number) => (
+                      <div key={itemIdx} className="flex justify-between items-center text-xs">
+                        <div className="flex-1 pr-2">
+                          <p className="font-semibold text-stone-700">{item.Name}</p>
+                          <p className="text-[10px] text-stone-400">
+                            {item.Qty} × {hideBalances ? '••••••' : formatCurrency(item.Price, family?.currency)}
+                          </p>
+                        </div>
+                        <div className="font-brand font-bold text-stone-600">
+                          {hideBalances ? '••••••' : formatCurrency(item.Qty * item.Price, family?.currency)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </motion.div>
             ))}
             {recentTransactions.length === 0 && (
@@ -1011,7 +1383,7 @@ const containerVariants = {
         >
           <Target size={22} className="group-hover:scale-110" />
         </button>
-        {isMarried && (
+        {isMarried && !isChild && (
           <button 
             id="btn-nav-kids"
             aria-label="Modul Tabungan Anak / Kids Financial Kit"
@@ -1123,6 +1495,68 @@ const containerVariants = {
         onOpenDebtTracker={() => { setIsHealthDetailOpen(false); setIsDebtTrackerOpen(true); }}
         onOpenAiAdvisor={() => { setIsHealthDetailOpen(false); setIsAiAdvisorOpen(true); }}
       />
+
+      {/* Invite Confirmation Popup Modal */}
+      <AnimatePresence>
+        {isInviteModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm" 
+              onClick={() => { setIsInviteModalOpen(false); setPendingInviteCode(null); }} 
+            />
+            
+            <motion.div 
+              initial={{ scale: 0.9, y: 20, opacity: 0 }} 
+              animate={{ scale: 1, y: 0, opacity: 1 }} 
+              exit={{ scale: 0.9, y: 20, opacity: 0 }} 
+              className="relative w-full max-w-sm bg-white rounded-3xl p-6 shadow-2xl z-10 border border-stone-100 flex flex-col items-center text-center space-y-6"
+            >
+              {/* Header Icon Visual */}
+              <div className="w-16 h-16 bg-indigo-50 text-indigo-600 rounded-2xl flex items-center justify-center text-2xl shadow-inner">
+                <Users size={28} />
+              </div>
+
+              {/* Text Info */}
+              <div className="space-y-2">
+                <h3 className="font-brand font-bold text-stone-900 text-lg">
+                  {isId ? 'Undangan Kolaborasi!' : 'Collaboration Invite!'}
+                </h3>
+                <p className="text-stone-500 text-xs leading-relaxed font-medium">
+                  {isId 
+                    ? 'Anda telah diundang untuk bergabung ke ruang keuangan bersama. Masukkan ruang dengan kode undangan:' 
+                    : 'You have been invited to join a shared financial space. Enter the space using the invite code:'}
+                </p>
+                <div className="bg-indigo-50 border border-indigo-100/50 p-3 rounded-2xl font-mono font-bold text-indigo-900 text-xl tracking-widest uppercase mt-3">
+                  {pendingInviteCode}
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="w-full flex flex-col gap-2 pt-2">
+                <button
+                  onClick={handleConfirmInviteJoin}
+                  disabled={isJoiningInvite}
+                  className="w-full h-12 bg-indigo-600 text-white rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-100 disabled:opacity-50"
+                >
+                  {isJoiningInvite 
+                    ? (isId ? 'Bergabung...' : 'Joining...') 
+                    : (isId ? 'Ya, Gabung Sekarang' : 'Yes, Join Now')}
+                </button>
+                <button
+                  onClick={() => { setIsInviteModalOpen(false); setPendingInviteCode(null); }}
+                  disabled={isJoiningInvite}
+                  className="w-full h-12 bg-stone-50 hover:bg-stone-100 text-stone-600 rounded-xl font-bold transition-colors"
+                >
+                  {isId ? 'Batal' : 'Cancel'}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

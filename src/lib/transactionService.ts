@@ -7,6 +7,8 @@ export interface TransactionData {
   description: string;
   category: string;
   date: string;
+  items?: Array<{ Name: string; Qty: number; Price: number; Category?: string }>;
+  createdBy?: string;
 }
 
 export const addTransaction = async (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, BarChart3, HelpCircle, ArrowRight } from 'lucide-react';
 import { formatCurrency } from '../lib/utils';
 import { useTranslation } from 'react-i18next';

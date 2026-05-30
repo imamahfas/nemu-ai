@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, PieChart as PieChartIcon, TrendingUp, TrendingDown, Landmark, Sparkles, Activity, ShieldAlert } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';

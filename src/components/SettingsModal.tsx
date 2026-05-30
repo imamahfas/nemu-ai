@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { X, Settings, Users, KeyRound, ArrowRight } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { X, Settings, Users, KeyRound, ArrowRight, Share2 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, updateDoc, setDoc, collection, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, collection, query, where, getDocs, getDoc, arrayUnion } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
@@ -38,6 +38,31 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
     setSpaceType(mode);
   };
 
+  const handleShareInviteLink = async () => {
+    const isId = i18n.language?.startsWith('id');
+    const inviteLink = `${window.location.origin}/?invite=${family?.inviteCode}`;
+    const shareData = {
+      title: isId ? 'Undangan Ruang Keuangan Nemu' : 'Nemu Financial Space Invitation',
+      text: isId 
+        ? `Mari kelola keuangan bersama di ruang ${family?.name || 'keuangan'} menggunakan aplikasi Nemu! Klik link ini untuk bergabung:` 
+        : `Let's manage our finances together in ${family?.name || 'our space'} using Nemu app! Click this link to join:`,
+      url: inviteLink
+    };
+
+    if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        console.log("Web Share cancelled or failed, falling back to clipboard copy", err);
+        await navigator.clipboard.writeText(inviteLink);
+        alert(isId ? "Link undangan berhasil disalin!" : "Invite link copied to clipboard!");
+      }
+    } else {
+      await navigator.clipboard.writeText(inviteLink);
+      alert(isId ? "Link undangan berhasil disalin!" : "Invite link copied to clipboard!");
+    }
+  };
+
   const handleJoinSpace = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteCodeInput || !user || !profile) return;
@@ -47,7 +72,7 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
 
     try {
       // Find family with this invite code
-      const q = query(collection(db, 'families'), where('inviteCode', '==', inviteCodeInput.toUpperCase()));
+      const q = query(collection(db, 'families'), where('inviteCode', '==', inviteCodeInput.trim().toUpperCase()));
       const querySnapshot = await getDocs(q);
 
       if (querySnapshot.empty) {
@@ -86,13 +111,13 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
         profileUpdates.personalSpaceId = newFamilyId;
       }
 
-      await updateDoc(doc(db, 'users', user.uid), profileUpdates);
+      await setDoc(doc(db, 'users', user.uid), profileUpdates, { merge: true });
 
       alert(isId ? "Berhasil bergabung ke ruang! Memuat ulang..." : "Successfully joined the space! Reloading...");
       window.location.reload();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert(isId ? "Gagal bergabung ke ruang." : "Error joining space.");
+      alert(isId ? `Gagal bergabung ke ruang: ${error?.message || error}` : `Error joining space: ${error?.message || error}`);
     }
     setIsJoining(false);
   };
@@ -136,14 +161,17 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
       const sa = parseFloat(limitSavings as string);
       if (limitSavings !== '' && !isNaN(sa) && sa >= 0) budgetLimits.Savings = sa;
 
-      // Pre-generate invite code on auto-creation if not already existing
+      const familyDocRef = doc(db, 'families', activeSpaceId);
+      
+      // Fetch target document to preserve its existing totalBalance and inviteCode
+      const targetDocSnap = await getDoc(familyDocRef);
+      const targetDocData = targetDocSnap.exists() ? targetDocSnap.data() : null;
+
+      const existingBalance = targetDocData ? (targetDocData.totalBalance ?? 0) : 0;
+
       const inviteCodePrefix = spaceType === 'personal' ? 'P-' : spaceType === 'unmarried' ? 'C-' : 'F-';
       const randomCode = Math.random().toString(36).substring(2, 8).toUpperCase();
-
-      const isTargetMatchesCurrent = family?.spaceType === spaceType;
-      const targetInviteCode = isTargetMatchesCurrent 
-        ? (family?.inviteCode || (inviteCodePrefix + randomCode))
-        : (inviteCodePrefix + randomCode);
+      const targetInviteCode = targetDocData?.inviteCode || (inviteCodePrefix + randomCode);
 
       const updates: any = {
         name: (customName || '').trim() || (
@@ -158,11 +186,9 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
         spaceType,
         updatedAt: new Date().toISOString()
       };
-
-      const familyDocRef = doc(db, 'families', activeSpaceId);
       
       await setDoc(familyDocRef, {
-        totalBalance: isTargetMatchesCurrent ? (family?.totalBalance || 0) : 0,
+        totalBalance: existingBalance,
         inviteCode: targetInviteCode,
         members: arrayUnion(user.uid),
         ...updates
@@ -212,6 +238,27 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
             </div>
 
             <div className="space-y-8 flex-1 overflow-y-auto pr-2 custom-scrollbar pb-10">
+              {profile?.role === 'child' ? (
+                <div className="flex flex-col items-center justify-center text-center p-8 space-y-6 bg-stone-50 rounded-[2.5rem] border border-stone-100 mt-4">
+                  <div className="w-16 h-16 bg-amber-50 text-amber-500 rounded-2xl flex items-center justify-center text-3xl shadow-inner">
+                    🧒
+                  </div>
+                  <div className="space-y-2">
+                    <h3 className="font-brand font-bold text-stone-900 text-base">
+                      {isId ? 'Akses Terbatas (Akun Anak)' : 'Restricted Access (Kid Account)'}
+                    </h3>
+                    <p className="text-stone-500 text-xs leading-relaxed font-medium">
+                      {isId 
+                        ? 'Hanya akun Orang Tua yang memiliki kontrol penuh untuk mengubah konfigurasi nama, mata uang, batas anggaran, serta beralih mode ruang keuangan.' 
+                        : 'Only Parent accounts have full permission to change space configuration, currency, budget limits, or switch active spaces.'}
+                    </p>
+                  </div>
+                  <div className="w-full border-t border-stone-200/60 pt-4 text-[10px] text-stone-400 font-bold uppercase tracking-widest leading-normal">
+                    {isId ? 'Hubungi orang tua Anda untuk mengubah pengaturan' : 'Ask your parents to change these configurations'}
+                  </div>
+                </div>
+              ) : (
+                <>
               
               {/* Space Mode Selector */}
               <div className="space-y-4">
@@ -395,12 +442,23 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
                         <KeyRound size={18} />
                         <span className="font-mono font-bold text-lg tracking-widest text-stone-800">{family?.inviteCode || 'N/A'}</span>
                       </div>
-                      <button 
-                        onClick={() => { navigator.clipboard.writeText(family?.inviteCode || ''); alert(isId ? "Kode disalin!" : "Code copied!"); }}
-                        className="text-[10px] bg-stone-200 text-stone-600 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-300"
-                      >
-                        {isId ? 'Salin' : 'Copy'}
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          type="button"
+                          onClick={() => { navigator.clipboard.writeText(family?.inviteCode || ''); alert(isId ? "Kode disalin!" : "Code copied!"); }}
+                          className="text-[10px] bg-stone-200 text-stone-600 px-3 py-1.5 rounded-full font-bold uppercase tracking-widest hover:bg-stone-300 transition-colors"
+                        >
+                          {isId ? 'Salin' : 'Copy'}
+                        </button>
+                        <button 
+                          type="button"
+                          onClick={handleShareInviteLink}
+                          className="p-1.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 rounded-full transition-colors flex items-center justify-center"
+                          title={isId ? "Bagikan Link" : "Share Link"}
+                        >
+                          <Share2 size={14} />
+                        </button>
+                      </div>
                     </div>
                   </div>
 
@@ -415,9 +473,9 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
                         type="text" 
                         value={inviteCodeInput}
                         onChange={e => setInviteCodeInput(e.target.value)}
-                        placeholder={isId ? "Masukkan kode 6 digit" : "Enter 6-char code"} 
+                        placeholder={isId ? "Contoh: F-XXXXXX" : "e.g. F-XXXXXX"} 
                         className="flex-1 bg-stone-50 p-3 rounded-xl font-mono font-bold border border-stone-100 uppercase" 
-                        maxLength={6}
+                        maxLength={8}
                         required
                       />
                       <button 
@@ -448,8 +506,9 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
                   </p>
                 </div>
               )}
-
-            </div>
+            </>
+          )}
+        </div>
           </motion.div>
         </div>
       )}

@@ -4,7 +4,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Dashboard from './views/Dashboard';
 import { InstallPWA } from './components/InstallPWA';
 import { LogIn, Sparkles, Languages } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { SplashScreen } from './components/SplashScreen';
 
@@ -99,7 +99,7 @@ function LoginPage() {
 
         <div className="space-y-4">
           <button 
-            onClick={signIn}
+            onClick={() => signIn()}
             className="w-full h-16 bg-stone-900 text-white rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-stone-800 transition-all active:scale-95 shadow-2xl shadow-stone-300"
           >
             <LogIn size={22} className="text-orange-400" />

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, Heart, MessageCircle, Repeat2, Users, Send, Bell } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 

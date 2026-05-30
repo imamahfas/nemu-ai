@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { X, Sparkles, Send, Bot, User as UserIcon, HelpCircle } from 'lucide-react';
 import { formatCurrency } from '../lib/utils';
@@ -103,7 +103,7 @@ export function AIAdvisorModal({ isOpen, onClose, transactions, spaceType }: {
         Respond in ${i18n.language === 'id' ? 'Indonesian' : 'English'}.
       `;
 
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`;
       const res = await fetch(url, {
         method: 'POST',
         headers: {

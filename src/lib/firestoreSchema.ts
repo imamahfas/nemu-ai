@@ -32,6 +32,7 @@ export const FirestoreSchema = {
     description: string;
     receiptUrl?: string;
     date: string;
+    createdBy?: string;
   }) {
     const txRef = doc(collection(db, collections.TRANSACTIONS));
     await setDoc(txRef, {

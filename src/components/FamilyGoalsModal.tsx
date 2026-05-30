@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, Target, Plus, PiggyBank, Sparkles, AlertCircle, Coins, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { formatCurrency, formatNumberInput, cn } from '../lib/utils';
 import { useTranslation } from 'react-i18next';
 import { db } from '../lib/firebase';
 import { collection, query, where, onSnapshot, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { useAuth } from '../contexts/AuthContext';
 
 export function FamilyGoalsModal({ 
   isOpen, 
@@ -23,6 +24,8 @@ export function FamilyGoalsModal({
 }) {
   const { t, i18n } = useTranslation();
   const isId = i18n.language?.startsWith('id');
+  const { profile } = useAuth();
+  const isChild = profile?.role === 'child';
   
   // Navigation tabs for Married/Family mode
   const [activeTab, setActiveTab] = useState<'family' | 'kids'>('family');
@@ -377,16 +380,18 @@ export function FamilyGoalsModal({
                                 {formatCurrency(goal.currentAmount)} / {formatCurrency(goal.targetAmount)}
                               </p>
                               {percentage < 100 ? (
-                                <button 
-                                  onClick={() => {
-                                    setAllocatingGoalId(isAllocating ? null : goal.id);
-                                    setCustomAllocAmount('');
-                                  }}
-                                  className="bg-stone-900 text-white px-4 py-2 rounded-2xl text-[9px] font-bold uppercase tracking-widest hover:bg-stone-800 active:scale-95 transition-all flex items-center gap-1 shadow-sm"
-                                >
-                                  {isId ? 'Isi Saldo' : 'Fund Goal'}
-                                  <ChevronRight size={10} />
-                                </button>
+                                !isChild && (
+                                  <button 
+                                    onClick={() => {
+                                      setAllocatingGoalId(isAllocating ? null : goal.id);
+                                      setCustomAllocAmount('');
+                                    }}
+                                    className="bg-stone-900 text-white px-4 py-2 rounded-2xl text-[9px] font-bold uppercase tracking-widest hover:bg-stone-800 active:scale-95 transition-all flex items-center gap-1 shadow-sm"
+                                  >
+                                    {isId ? 'Isi Saldo' : 'Fund Goal'}
+                                    <ChevronRight size={10} />
+                                  </button>
+                                )
                               ) : (
                                 <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
                                   <CheckCircle2 size={12} className="fill-emerald-50" />
@@ -507,16 +512,18 @@ export function FamilyGoalsModal({
                                 {formatCurrency(kidBalance)} / {formatCurrency(goal.targetAmount)}
                               </p>
                               {percentage < 100 ? (
-                                <button 
-                                  onClick={() => {
-                                    setAllocatingKidGoalId(isAllocating ? null : goal.id);
-                                    setCustomAllocAmount('');
-                                  }}
-                                  className="bg-emerald-600 text-white px-4 py-2 rounded-2xl text-[9px] font-bold uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-1 shadow-sm"
-                                >
-                                  {isId ? 'Beri Uang Saku' : 'Fund pocket money'}
-                                  <ChevronRight size={10} />
-                                </button>
+                                !isChild && (
+                                  <button 
+                                    onClick={() => {
+                                      setAllocatingKidGoalId(isAllocating ? null : goal.id);
+                                      setCustomAllocAmount('');
+                                    }}
+                                    className="bg-emerald-600 text-white px-4 py-2 rounded-2xl text-[9px] font-bold uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all flex items-center gap-1 shadow-sm"
+                                  >
+                                    {isId ? 'Beri Uang Saku' : 'Fund pocket money'}
+                                    <ChevronRight size={10} />
+                                  </button>
+                                )
                               ) : (
                                 <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 uppercase tracking-widest">
                                   <CheckCircle2 size={12} className="fill-emerald-50" />
@@ -609,12 +616,14 @@ export function FamilyGoalsModal({
                     </div>
                   )}
 
-                  <button 
-                    onClick={() => setIsAdding(true)} 
-                    className="w-full border-2 border-dashed border-stone-200 text-stone-400 py-4 rounded-[2rem] font-bold flex items-center justify-center gap-2 hover:bg-stone-50 hover:border-stone-300 transition-all active:scale-[0.99] duration-300 text-xs uppercase tracking-widest"
-                  >
-                    <Plus size={16} /> {isId ? 'Tambah Target Baru' : 'Add New Goal'}
-                  </button>
+                  {!isChild && (
+                    <button 
+                      onClick={() => setIsAdding(true)} 
+                      className="w-full border-2 border-dashed border-stone-200 text-stone-400 py-4 rounded-[2rem] font-bold flex items-center justify-center gap-2 hover:bg-stone-50 hover:border-stone-300 transition-all active:scale-[0.99] duration-300 text-xs uppercase tracking-widest"
+                    >
+                      <Plus size={16} /> {isId ? 'Tambah Target Baru' : 'Add New Goal'}
+                    </button>
+                  )}
 
                 </div>
               )}

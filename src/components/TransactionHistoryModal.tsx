@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { X, History } from 'lucide-react';
 import { formatCurrency, cn } from '../lib/utils';
 import { db } from '../lib/firebase';
@@ -21,6 +21,7 @@ export function TransactionHistoryModal({
 }) {
   const { t, i18n } = useTranslation();
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen || !familyId) return;
@@ -103,25 +104,57 @@ export function TransactionHistoryModal({
                 </div>
               ) : (
                 filteredTransactions.map((tx) => (
-                  <div key={tx.id} className="bg-stone-50 p-4 rounded-2xl flex items-center gap-4">
-                    <div className={cn(
-                       "w-12 h-12 rounded-xl flex items-center justify-center text-xl shadow-inner",
-                       tx.type === 'expense' ? "bg-rose-100/50" : "bg-emerald-100/50"
-                    )}>
-                      {tx.category === 'Food' ? '🍱' : tx.category === 'Transport' ? '⛽' : tx.category === 'Education' ? '📚' : '📦'}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-stone-800 truncate mb-0.5 text-sm">{tx.description}</p>
-                      <p className="text-stone-400 text-[10px] font-bold uppercase tracking-widest">{isId ? translateCategory(tx.category) : tx.category} • {new Date(tx.date).toLocaleDateString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className={cn(
-                        "text-sm font-brand font-bold",
-                        tx.type === 'expense' ? "text-stone-800" : "text-emerald-600"
+                  <div 
+                    key={tx.id} 
+                    onClick={() => tx.items && setExpandedTxId(expandedTxId === tx.id ? null : tx.id)}
+                    className={cn(
+                      "bg-stone-50 p-4 rounded-2xl flex flex-col gap-3 transition-all border border-transparent",
+                      tx.items ? "cursor-pointer hover:border-stone-200" : ""
+                    )}
+                  >
+                    <div className="flex items-center gap-4 w-full">
+                      <div className={cn(
+                         "w-12 h-12 rounded-xl flex items-center justify-center text-xl shadow-inner flex-shrink-0",
+                         tx.type === 'expense' ? "bg-rose-100/50" : "bg-emerald-100/50"
                       )}>
-                        {tx.type === 'expense' ? '-' : '+'}{formatCurrency(tx.amount, currency)}
-                      </p>
+                        {tx.category === 'Food' ? '🍱' : tx.category === 'Transport' ? '⛽' : tx.category === 'Education' ? '📚' : '📦'}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-stone-800 truncate mb-0.5 text-sm">{tx.description}</p>
+                        <p className="text-stone-400 text-[10px] font-bold uppercase tracking-widest">
+                          {isId ? translateCategory(tx.category) : tx.category} • {new Date(tx.date).toLocaleDateString()}
+                          {tx.createdBy && ` • ${isId ? 'oleh' : 'by'} ${tx.createdBy}`}
+                          {tx.items && ` • ${isId ? '🧾 Lihat Struk' : '🧾 View Items'}`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className={cn(
+                          "text-sm font-brand font-bold",
+                          tx.type === 'expense' ? "text-stone-800" : "text-emerald-600"
+                        )}>
+                          {tx.type === 'expense' ? '-' : '+'}{formatCurrency(tx.amount, currency)}
+                        </p>
+                      </div>
                     </div>
+
+                    {/* Expandable Items Details */}
+                    {expandedTxId === tx.id && tx.items && (
+                      <div className="border-t border-dashed border-stone-200 pt-3 mt-1 space-y-2">
+                        {tx.items.map((item: any, idx: number) => (
+                          <div key={idx} className="flex justify-between items-center text-xs">
+                            <div className="flex-1 pr-2">
+                              <p className="font-semibold text-stone-700">{item.Name}</p>
+                              <p className="text-[10px] text-stone-400">
+                                {item.Qty} × {formatCurrency(item.Price, currency)}
+                              </p>
+                            </div>
+                            <div className="font-brand font-bold text-stone-600">
+                              {formatCurrency(item.Qty * item.Price, currency)}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))
               )}
