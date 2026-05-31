@@ -29,10 +29,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const fSpaceId = `family_${user.uid}`;
 
           if (userDoc.exists()) {
-            const profileData = userDoc.data();
-            
+            let profileData = userDoc.data();
+
+            // Auto-reset: if user's familyId points to a space where they're no longer a member, fall back to personal space
+            if (profileData.familyId) {
+              try {
+                const familySnap = await getDoc(doc(db, 'families', profileData.familyId));
+                const members: string[] = familySnap.exists() ? (familySnap.data().members || []) : [];
+                if (!members.includes(user.uid)) {
+                  const fallbackSpaceId = profileData.personalSpaceId || `personal_${user.uid}`;
+                  await updateDoc(doc(db, 'users', user.uid), { familyId: fallbackSpaceId, role: 'parent' });
+                  profileData = { ...profileData, familyId: fallbackSpaceId, role: 'parent' };
+                }
+              } catch (_) {}
+            }
+
             // Check if spaces are already initialized in user profile and have correct prefixes
-            const isCorrupted = !profileData.personalSpaceId || 
+            const isCorrupted = !profileData.personalSpaceId ||
                                 profileData.personalSpaceId.startsWith('couple_') || 
                                 profileData.personalSpaceId.startsWith('family_') ||
                                 !profileData.coupleSpaceId || 

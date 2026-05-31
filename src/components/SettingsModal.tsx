@@ -25,6 +25,7 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
   // Members & Roles management states
   const [familyMembers, setFamilyMembers] = useState<any[]>([]);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+  const [pendingMembers, setPendingMembers] = useState<any[]>([]);
 
   useEffect(() => {
     if (family?.spaceType) setSpaceType(family.spaceType);
@@ -62,8 +63,8 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
           .filter(d => d.exists())
           .map(d => ({ uid: d.id, ...d.data() }));
         
-        console.log('[fetchMembers] loaded', membersList.map(m => ({ uid: m.uid, role: m.role, familyId: m.familyId })));
         setFamilyMembers(membersList);
+        setPendingMembers(family.pendingMembers || []);
       } catch (err) {
         console.error("Failed to fetch family members:", err);
         // Fallback: query by familyId
@@ -142,18 +143,92 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
     if (!confirmed) return;
 
     try {
+      // Fetch target user's own personal space to reset them there
+      const targetDoc = await getDoc(doc(db, 'users', targetUid));
+      const targetData = targetDoc.data() || {};
+      const personalSpaceId = targetData.personalSpaceId || `personal_${targetUid}`;
+
+      // Ensure personal space exists for the removed user
+      const personalSpaceRef = doc(db, 'families', personalSpaceId);
+      const personalSpaceSnap = await getDoc(personalSpaceRef);
+      if (!personalSpaceSnap.exists()) {
+        await setDoc(personalSpaceRef, {
+          name: `${targetData.displayName || 'My'} Personal Space`,
+          totalBalance: 0,
+          currency: targetData.currency || 'IDR',
+          members: [targetUid],
+          spaceType: 'personal',
+          inviteCode: 'P-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
+
       await updateDoc(doc(db, 'families', family.id), {
         members: arrayRemove(targetUid)
       });
       await updateDoc(doc(db, 'users', targetUid), {
-        familyId: '',
-        role: 'parent'
+        familyId: personalSpaceId,
+        personalSpaceId,
+        role: 'parent',
+        pendingFamilyId: ''
       });
       setFamilyMembers(prev => prev.filter(m => m.uid !== targetUid));
       alert(isId ? `${targetName} berhasil dikeluarkan dari ruang.` : `${targetName} has been removed from the space.`);
     } catch (err: any) {
       console.error('[handleRemoveMember] FAILED', err);
       alert((isId ? 'Gagal mengeluarkan anggota: ' : 'Failed to remove member: ') + (err?.message || err));
+    }
+  };
+
+  const handleApprove = async (pending: any) => {
+    const isId = i18n.language?.startsWith('id');
+    try {
+      // Fetch fresh to avoid cache conflicts
+      const freshSnap = await getDoc(doc(db, 'families', family.id));
+      const freshPending: any[] = freshSnap.data()?.pendingMembers || [];
+      const freshMembers: string[] = freshSnap.data()?.members || [];
+
+      await updateDoc(doc(db, 'families', family.id), {
+        members: [...new Set([...freshMembers, pending.uid])],
+        pendingMembers: freshPending.filter((p: any) => p.uid !== pending.uid)
+      });
+
+      // Update user profile with familyId and role
+      const profileUpdates: any = {
+        familyId: family.id,
+        role: pending.suggestedRole || 'child',
+        pendingFamilyId: ''
+      };
+      if (pending.targetSpaceType === 'unmarried') profileUpdates.coupleSpaceId = family.id;
+      else if (pending.targetSpaceType === 'married') profileUpdates.familySpaceId = family.id;
+      else profileUpdates.personalSpaceId = family.id;
+
+      await setDoc(doc(db, 'users', pending.uid), profileUpdates, { merge: true });
+
+      setPendingMembers(prev => prev.filter(p => p.uid !== pending.uid));
+      setFamilyMembers(prev => [...prev, { ...pending, role: pending.suggestedRole || 'child', familyId: family.id }]);
+      alert(isId ? `${pending.displayName} berhasil disetujui!` : `${pending.displayName} approved!`);
+    } catch (err: any) {
+      console.error('[handleApprove] FAILED', err);
+      alert((isId ? 'Gagal menyetujui: ' : 'Failed to approve: ') + (err?.message || err));
+    }
+  };
+
+  const handleRejectPending = async (pending: any) => {
+    const isId = i18n.language?.startsWith('id');
+    try {
+      const freshSnap = await getDoc(doc(db, 'families', family.id));
+      const freshPending: any[] = freshSnap.data()?.pendingMembers || [];
+      await updateDoc(doc(db, 'families', family.id), {
+        pendingMembers: freshPending.filter((p: any) => p.uid !== pending.uid)
+      });
+      await setDoc(doc(db, 'users', pending.uid), { pendingFamilyId: '' }, { merge: true });
+
+      setPendingMembers(prev => prev.filter(p => p.uid !== pending.uid));
+      alert(isId ? `Permintaan ${pending.displayName} ditolak.` : `${pending.displayName}'s request rejected.`);
+    } catch (err: any) {
+      console.error('[handleRejectPending] FAILED', err);
+      alert((isId ? 'Gagal menolak: ' : 'Failed to reject: ') + (err?.message || err));
     }
   };
 
@@ -236,29 +311,44 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
         return;
       }
 
-      // Add user to new family members
-      await updateDoc(doc(db, 'families', newFamilyId), {
-        members: arrayUnion(user.uid)
-      });
-
-      // Update user profile to new familyId and save specific space reference
-      const profileUpdates: any = { 
-        familyId: newFamilyId,
-        role: assignedRole 
-      };
-
-      if (targetSpaceType === 'unmarried') {
-        profileUpdates.coupleSpaceId = newFamilyId;
-      } else if (targetSpaceType === 'married') {
-        profileUpdates.familySpaceId = newFamilyId;
-      } else {
-        profileUpdates.personalSpaceId = newFamilyId;
+      // Check if already pending
+      const existingPending: any[] = newFamilyData.pendingMembers || [];
+      if (existingPending.some((p: any) => p.uid === user.uid)) {
+        alert(isId ? "Permintaan Anda sudah dikirim. Tunggu persetujuan admin." : "Your request is already pending. Wait for admin approval.");
+        setIsJoining(false);
+        return;
       }
 
-      await setDoc(doc(db, 'users', user.uid), profileUpdates, { merge: true });
+      // Fetch fresh user profile to avoid stale cache data in pending entry
+      const freshUserSnap = await getDoc(doc(db, 'users', user.uid));
+      const freshUserData = freshUserSnap.exists() ? freshUserSnap.data() : {};
 
-      alert(isId ? "Berhasil bergabung ke ruang! Memuat ulang..." : "Successfully joined the space! Reloading...");
-      window.location.reload();
+      const pendingEntry = {
+        uid: user.uid,
+        displayName: freshUserData.displayName || user.displayName || 'User',
+        email: freshUserData.email || user.email || '',
+        photoURL: freshUserData.photoURL || user.photoURL || '',
+        requestedAt: new Date().toISOString(),
+        suggestedRole: assignedRole,
+        targetSpaceType,
+      };
+
+      // Fetch fresh from server to avoid offline cache conflicts
+      const freshFamilySnap = await getDoc(doc(db, 'families', newFamilyId));
+      const freshPending: any[] = freshFamilySnap.data()?.pendingMembers || [];
+      const updatedPending = [...freshPending.filter((p: any) => p.uid !== user.uid), pendingEntry];
+
+      await updateDoc(doc(db, 'families', newFamilyId), {
+        pendingMembers: updatedPending
+      });
+
+      // Mark user as pending so UI can reflect state
+      await setDoc(doc(db, 'users', user.uid), { pendingFamilyId: newFamilyId }, { merge: true });
+
+      alert(isId
+        ? "Permintaan bergabung telah dikirim! Tunggu persetujuan dari admin ruang."
+        : "Join request sent! Waiting for space admin approval.");
+      setInviteCodeInput('');
     } catch (error: any) {
       console.error(error);
       alert(isId ? `Gagal bergabung ke ruang: ${error?.message || error}` : `Error joining space: ${error?.message || error}`);
@@ -685,6 +775,54 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
                       </div>
                     )}
                   </div>
+
+                  {/* Pending Approval Requests - only visible to parents */}
+                  {(profile?.role || 'parent') === 'parent' && pendingMembers.length > 0 && (
+                    <div className="space-y-4 pt-4 border-t border-amber-100">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-bold text-stone-800 text-sm">{isId ? 'Permintaan Bergabung' : 'Join Requests'}</h3>
+                          <span className="text-[9px] font-bold bg-amber-400 text-white px-2 py-0.5 rounded-full">{pendingMembers.length}</span>
+                        </div>
+                        <p className="text-[10px] text-stone-400 font-bold uppercase tracking-widest mt-0.5">{isId ? 'Setujui atau tolak permintaan anggota baru' : 'Approve or reject new member requests'}</p>
+                      </div>
+                      <div className="space-y-3">
+                        {pendingMembers.map((pending: any) => (
+                          <div key={pending.uid} className="flex items-center justify-between p-3 bg-amber-50 rounded-2xl border border-amber-100">
+                            <div className="flex items-center gap-3">
+                              {pending.photoURL ? (
+                                <img src={pending.photoURL} alt={pending.displayName} className="w-9 h-9 rounded-full object-cover border border-amber-200" />
+                              ) : (
+                                <div className="w-9 h-9 rounded-full bg-amber-200 flex items-center justify-center font-bold text-amber-700 text-sm">
+                                  {pending.displayName?.substring(0, 1).toUpperCase() || 'U'}
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-xs font-bold text-stone-800">{pending.displayName}</p>
+                                <p className="text-[9px] text-amber-600 font-bold uppercase tracking-widest mt-0.5">{isId ? 'Menunggu persetujuan' : 'Pending approval'}</p>
+                              </div>
+                            </div>
+                            <div className="flex gap-1.5 flex-shrink-0">
+                              <button
+                                type="button"
+                                onClick={() => handleApprove(pending)}
+                                className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 transition-colors"
+                              >
+                                {isId ? 'Setuju' : 'Approve'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRejectPending(pending)}
+                                className="text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 bg-rose-100 text-rose-600 rounded-lg hover:bg-rose-200 transition-colors"
+                              >
+                                {isId ? 'Tolak' : 'Reject'}
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   {/* Join Space */}
                   <div className="space-y-4 pt-4 border-t border-stone-100">

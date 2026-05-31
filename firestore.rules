@@ -39,11 +39,15 @@ service cloud.firestore {
       // Write own profile (any field)
       allow write: if isAuthenticated() && request.auth.uid == userId;
 
-      // Parent updates ANOTHER user's role or clears familyId (remove from space)
+      // Parent updates ANOTHER user's role, familyId, or space references
       allow update: if isAuthenticated() &&
         request.auth.uid != userId &&
-        isParent(request.auth.uid) &&
-        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'familyId']);
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'familyId', 'pendingFamilyId', 'coupleSpaceId', 'familySpaceId', 'personalSpaceId']);
+
+      // User can set their own pendingFamilyId when requesting to join
+      allow update: if isAuthenticated() &&
+        request.auth.uid == userId &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingFamilyId']);
     }
 
     // ─── Families Collection ─────────────────────────────────────────────────
@@ -53,8 +57,13 @@ service cloud.firestore {
       allow update: if isAuthenticated() && (
         // Already a member can update
         (request.auth.uid in resource.data.members) ||
-        // Or joining: user adds themselves to members
-        (request.auth.uid in request.resource.data.members)
+        // Joining: user adds themselves to members
+        (request.auth.uid in request.resource.data.members) ||
+        // Requesting to join: user adds themselves to pendingMembers only
+        (
+          !(request.auth.uid in resource.data.members) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['pendingMembers'])
+        )
       );
       allow delete: if isAuthenticated() &&
         request.auth.uid in resource.data.members &&
