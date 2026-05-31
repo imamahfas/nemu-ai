@@ -5,6 +5,7 @@ import { formatCurrency, cn } from '../lib/utils';
 import { db } from '../lib/firebase';
 import { collection, query, where, orderBy, limit, onSnapshot } from 'firebase/firestore';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../contexts/AuthContext';
 
 export function TransactionHistoryModal({ 
   isOpen, 
@@ -20,6 +21,7 @@ export function TransactionHistoryModal({
   filterType?: 'income' | 'expense' | 'all'
 }) {
   const { t, i18n } = useTranslation();
+  const { user, profile } = useAuth();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [expandedTxId, setExpandedTxId] = useState<string | null>(null);
 
@@ -33,15 +35,20 @@ export function TransactionHistoryModal({
     );
 
     const unsub = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      let docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
       docs.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      if (profile?.role === 'child') {
+        docs = docs.filter((tx: any) => tx.userId === user?.uid);
+      }
+      
       setTransactions(docs);
     }, (error) => {
       console.error("TransactionHistoryModal error loading transactions:", error);
     });
 
     return () => unsub();
-  }, [isOpen, familyId]);
+  }, [isOpen, familyId, profile?.role, user?.uid]);
 
   const isId = i18n.language?.startsWith('id');
   const translateCategory = (cat: string) => {

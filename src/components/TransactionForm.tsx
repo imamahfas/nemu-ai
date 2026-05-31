@@ -65,11 +65,6 @@ export function TransactionForm({ isOpen, onClose, userId, familyId, initialData
     e.preventDefault();
     if (!amount || !description) return;
 
-    if (profile?.role === 'child') {
-      alert(i18n.language.startsWith('id') ? "Akun anak tidak memiliki izin untuk menambah transaksi." : "Kid accounts are not permitted to add transactions.");
-      return;
-    }
-
     setIsSubmitting(true);
     try {
       const data: TransactionData = {

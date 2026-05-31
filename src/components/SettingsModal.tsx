@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Settings, Users, KeyRound, ArrowRight, Share2 } from 'lucide-react';
+import { X, Settings, Users, KeyRound, ArrowRight, Share2, Trash2 } from 'lucide-react';
 import { db } from '../lib/firebase';
-import { doc, updateDoc, setDoc, collection, query, where, getDocs, getDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, setDoc, collection, query, where, getDocs, getDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
@@ -129,6 +129,31 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
     } catch (err: any) {
       console.error('[handleUpdateRole] FAILED', { targetUid, newRole, err });
       alert((isId ? "Gagal memperbarui peran: " : "Failed to update role: ") + (err?.message || err));
+    }
+  };
+
+  const handleRemoveMember = async (targetUid: string, targetName: string) => {
+    const isId = i18n.language?.startsWith('id');
+    const confirmed = window.confirm(
+      isId
+        ? `Keluarkan ${targetName} dari ruang ini?`
+        : `Remove ${targetName} from this space?`
+    );
+    if (!confirmed) return;
+
+    try {
+      await updateDoc(doc(db, 'families', family.id), {
+        members: arrayRemove(targetUid)
+      });
+      await updateDoc(doc(db, 'users', targetUid), {
+        familyId: '',
+        role: 'parent'
+      });
+      setFamilyMembers(prev => prev.filter(m => m.uid !== targetUid));
+      alert(isId ? `${targetName} berhasil dikeluarkan dari ruang.` : `${targetName} has been removed from the space.`);
+    } catch (err: any) {
+      console.error('[handleRemoveMember] FAILED', err);
+      alert((isId ? 'Gagal mengeluarkan anggota: ' : 'Failed to remove member: ') + (err?.message || err));
     }
   };
 
@@ -619,24 +644,34 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
                               </div>
                               
                               {!isSelf && (profile?.role || 'parent') === 'parent' ? (
-                                <div 
-                                  className="flex gap-1 bg-stone-100 p-1 rounded-xl flex-shrink-0 border border-stone-200/40 relative z-20"
-                                  onClick={(e) => e.stopPropagation()}
-                                  onTouchStart={(e) => e.stopPropagation()}
-                                >
+                                <div className="flex items-center gap-2 flex-shrink-0">
+                                  <div
+                                    className="flex gap-1 bg-stone-100 p-1 rounded-xl border border-stone-200/40 relative z-20"
+                                    onClick={(e) => e.stopPropagation()}
+                                    onTouchStart={(e) => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateRole(member.uid, 'parent')}
+                                      className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${memberRole === 'parent' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
+                                    >
+                                      {isId ? 'Ortu' : 'Parent'}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleUpdateRole(member.uid, 'child')}
+                                      className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${memberRole === 'child' ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
+                                    >
+                                      {isId ? 'Anak' : 'Child'}
+                                    </button>
+                                  </div>
                                   <button
                                     type="button"
-                                    onClick={() => handleUpdateRole(member.uid, 'parent')}
-                                    className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${memberRole === 'parent' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
+                                    onClick={() => handleRemoveMember(member.uid, member.displayName || 'Anggota')}
+                                    className="p-1.5 bg-rose-50 text-rose-400 hover:bg-rose-100 hover:text-rose-600 rounded-lg transition-colors"
+                                    title={isId ? 'Keluarkan dari ruang' : 'Remove from space'}
                                   >
-                                    {isId ? 'Ortu' : 'Parent'}
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleUpdateRole(member.uid, 'child')}
-                                    className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${memberRole === 'child' ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
-                                  >
-                                    {isId ? 'Anak' : 'Child'}
+                                    <Trash2 size={13} />
                                   </button>
                                 </div>
                               ) : (

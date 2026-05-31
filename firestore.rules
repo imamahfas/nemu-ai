@@ -39,8 +39,11 @@ service cloud.firestore {
       // Write own profile (any field)
       allow write: if isAuthenticated() && request.auth.uid == userId;
 
-      // Parent updates ANOTHER user's role only
-      allow update: if isAuthenticated() && request.auth.uid != userId;
+      // Parent updates ANOTHER user's role or clears familyId (remove from space)
+      allow update: if isAuthenticated() &&
+        request.auth.uid != userId &&
+        isParent(request.auth.uid) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['role', 'familyId']);
     }
 
     // ─── Families Collection ─────────────────────────────────────────────────

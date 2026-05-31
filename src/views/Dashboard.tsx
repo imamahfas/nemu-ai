@@ -168,8 +168,11 @@ export default function Dashboard() {
     return spentMap;
   })();
 
+  const childSelfBalance = totalIncome - totalExpense;
+  const activeBalance = profile?.role === 'child' ? childSelfBalance : (family?.totalBalance || 0);
+
   const totalBudgetLimit: number = (Object.values(family?.budgetLimits || {}) as any[]).reduce((sum: number, lim: any) => sum + (parseFloat(lim) || 0), 0);
-  const isOverbudget = totalBudgetLimit > 0 && ((family?.totalBalance || 0) as number) < totalBudgetLimit;
+  const isOverbudget = totalBudgetLimit > 0 && activeBalance < totalBudgetLimit;
 
   // Derived Health Score Engine
   const calculateHealthScore = () => {
@@ -200,7 +203,8 @@ export default function Dashboard() {
       type: 'expense',
       category: 'Savings',
       description,
-      date: new Date().toISOString()
+      date: new Date().toISOString(),
+      createdBy: profile?.displayName || user?.displayName || 'User'
     });
   };
 
@@ -271,6 +275,29 @@ export default function Dashboard() {
         return;
       }
 
+      // Count target family members to check capacity and set default role
+      const targetMembersQuery = query(collection(db, 'users'), where('familyId', '==', newFamilyId));
+      const targetMembersSnap = await getDocs(targetMembersQuery);
+      const targetMembers = targetMembersSnap.docs.map(doc => doc.data());
+
+      const parentCount = targetMembers.filter(m => m.role === 'parent' || !m.role).length;
+      const childCount = targetMembers.filter(m => m.role === 'child').length;
+
+      let assignedRole: 'parent' | 'child' = 'parent';
+      if (parentCount >= 2) {
+        assignedRole = 'child';
+      }
+
+      if (assignedRole === 'child' && childCount >= 3) {
+        alert(isId 
+          ? "Gagal bergabung: Ruang ini sudah mencapai kapasitas maksimal (2 Orang Tua dan 3 Anak)!" 
+          : "Failed to join: This space has reached its maximum capacity (2 Parents and 3 Children)!");
+        setIsInviteModalOpen(false);
+        setPendingInviteCode(null);
+        setIsJoiningInvite(false);
+        return;
+      }
+
       // Add user to new family members
       await updateDoc(doc(db, 'families', newFamilyId), {
         members: arrayUnion(user.uid)
@@ -279,7 +306,7 @@ export default function Dashboard() {
       // Update user profile to new familyId and save specific space reference
       const profileUpdates: any = { 
         familyId: newFamilyId,
-        role: 'parent' 
+        role: assignedRole 
       };
 
       if (targetSpaceType === 'unmarried') {
@@ -353,7 +380,9 @@ export default function Dashboard() {
     const unsubFamily = onSnapshot(doc(db, 'families', profile.familyId), async (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        setFamily(data);
+        // IMPORTANT: always include the Firestore document ID so SettingsModal
+        // can correctly query members with where('familyId', '==', family.id)
+        setFamily({ id: docSnap.id, ...data });
         
         // Auto-heal missing or mismatched spaceType field for backward compatibility with old family documents!
         const isPersonal = profile.familyId.startsWith('personal_');
@@ -363,7 +392,7 @@ export default function Dashboard() {
         if (data.spaceType !== expectedSpaceType) {
           try {
             await updateDoc(doc(db, 'families', profile.familyId), { spaceType: expectedSpaceType });
-            setFamily({ ...data, spaceType: expectedSpaceType });
+            setFamily({ id: docSnap.id, ...data, spaceType: expectedSpaceType });
           } catch (err) {
             console.error("Failed to auto-heal mismatched spaceType:", err);
           }
@@ -392,7 +421,8 @@ export default function Dashboard() {
 
         try {
           await setDoc(doc(db, 'families', profile.familyId), newFamily);
-          setFamily(newFamily);
+          // Include the ID (which is profile.familyId) so SettingsModal member query works
+          setFamily({ id: profile.familyId, ...newFamily });
         } catch (err) {
           console.error("Failed to auto-create missing family space:", err);
         }
@@ -413,13 +443,18 @@ export default function Dashboard() {
       limit(100)
     );
     const unsubTransactions = onSnapshot(q, async (snapshot) => {
-      const docs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
-      docs.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      const allDocs = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+      allDocs.sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      let docs = [...allDocs];
+      if (profile?.role === 'child') {
+        docs = docs.filter((tx: any) => tx.userId === user?.uid);
+      }
       setRecentTransactions(docs);
 
-      // Auto-heal empty totalBalance when history exists!
-      if (docs.length > 0 && profile?.familyId) {
-        const calculatedBalance = docs.reduce((sum, tx: any) => {
+      // Auto-heal empty totalBalance when history exists (only for parents and using allDocs to get the true total!)
+      if (allDocs.length > 0 && profile?.familyId && profile?.role !== 'child') {
+        const calculatedBalance = allDocs.reduce((sum, tx: any) => {
           return sum + (tx.type === 'income' ? tx.amount : -tx.amount);
         }, 0);
 
@@ -755,18 +790,21 @@ const containerVariants = {
                 <p className="text-stone-400 text-xs font-bold uppercase tracking-widest flex items-center gap-2">
                   <LayoutDashboard size={12} /> 
                   <span>
-                    {family?.name || (
-                      family?.spaceType === 'personal' 
-                        ? t('personal_balance') 
-                        : family?.spaceType === 'unmarried' 
-                          ? t('joint_balance') 
-                          : t('shared_balance')
-                    )}
+                    {isChild 
+                      ? (isId ? 'Saldo Saya' : 'My Balance') 
+                      : (family?.name || (
+                          family?.spaceType === 'personal' 
+                            ? t('personal_balance') 
+                            : family?.spaceType === 'unmarried' 
+                              ? t('joint_balance') 
+                              : t('shared_balance')
+                        ))
+                    }
                   </span>
                 </p>
                 <div className="flex items-center gap-3.5 py-1.5 flex-wrap">
                   <h2 className="text-3xl sm:text-5xl font-brand font-bold tracking-tight text-white leading-none break-all">
-                    {hideBalances ? '••••••' : formatCurrency(family?.totalBalance || 0, family?.currency)}
+                    {hideBalances ? '••••••' : formatCurrency(activeBalance, family?.currency)}
                   </h2>
                   <button 
                     onClick={() => setHideBalances(!hideBalances)}
@@ -793,13 +831,24 @@ const containerVariants = {
             </div>
 
             {isChild ? (
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-3 relative z-10 text-left">
-                <span className="text-xl flex-shrink-0">🧒</span>
-                <p className="text-stone-300 text-xs font-semibold leading-normal">
-                  {isId 
-                    ? 'Mode Anak Aktif: Anda dapat memantau saldo, melihat riwayat transaksi, dan mengerjakan tugas Chores di modul anak.' 
-                    : 'Kid Mode Active: You can monitor balances, view transaction logs, and claim chore tasks in the Kids Kit.'}
-                </p>
+              <div className="space-y-4 w-full relative z-10 text-left">
+                <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-3 text-left">
+                  <span className="text-xl flex-shrink-0">🧒</span>
+                  <p className="text-stone-300 text-xs font-semibold leading-normal">
+                    {isId 
+                      ? 'Mode Anak Aktif: Kelola saldo mandiri Anda, catat transaksi celengan, dan kerjakan tugas seru!' 
+                      : 'Kid Mode Active: Manage your isolated savings, record piggy bank transactions, and do fun chores!'}
+                  </p>
+                </div>
+                <div className="flex gap-4">
+                  <button 
+                    id="btn-add-income-child"
+                    onClick={() => { setScannerData(null); setIsTxFormOpen(true); }}
+                    className="flex-1 h-14 bg-white text-stone-900 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-50 transition-all active:scale-95 shadow-lg shadow-black/20 focus:outline-none"
+                  >
+                    <Plus size={20} /> {isId ? 'Catat Transaksi' : 'Log Transaction'}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="flex gap-4 relative z-10">
@@ -1251,7 +1300,7 @@ const containerVariants = {
 
             {tasks.filter(t => t.status !== 'completed').map(task => {
               const isClaimed = task.status === 'claimed';
-              const isParent = profile?.role === 'parent';
+              const isParent = (profile?.role || 'parent') === 'parent';
 
               return (
                 <div key={task.id} className={cn(
