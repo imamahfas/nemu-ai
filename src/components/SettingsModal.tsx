@@ -44,35 +44,90 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
     const fetchMembers = async () => {
       setIsLoadingMembers(true);
       try {
-        const q = query(collection(db, 'users'), where('familyId', '==', family.id));
-        const snap = await getDocs(q);
-        const membersList = snap.docs.map(doc => doc.data());
+        // Use family.members array as source of truth (most reliable)
+        // Avoids race conditions where a newly joined member's familyId might not yet match
+        const memberUids: string[] = family.members || [];
+        
+        if (memberUids.length === 0) {
+          setFamilyMembers([]);
+          return;
+        }
+
+        // Fetch each member's user doc individually by UID
+        const memberPromises = memberUids.map((uid: string) =>
+          getDoc(doc(db, 'users', uid))
+        );
+        const memberDocs = await Promise.all(memberPromises);
+        const membersList = memberDocs
+          .filter(d => d.exists())
+          .map(d => ({ uid: d.id, ...d.data() }));
+        
+        console.log('[fetchMembers] loaded', membersList.map(m => ({ uid: m.uid, role: m.role, familyId: m.familyId })));
         setFamilyMembers(membersList);
       } catch (err) {
         console.error("Failed to fetch family members:", err);
+        // Fallback: query by familyId
+        try {
+          const q = query(collection(db, 'users'), where('familyId', '==', family.id));
+          const snap = await getDocs(q);
+          const membersList = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+          setFamilyMembers(membersList);
+        } catch (fallbackErr) {
+          console.error("Fallback fetch also failed:", fallbackErr);
+        }
       } finally {
         setIsLoadingMembers(false);
       }
     };
     
     fetchMembers();
-  }, [isOpen, family?.id]);
+  }, [isOpen, family?.id, family?.members]);
+
 
   const handleUpdateRole = async (targetUid: string, newRole: 'parent' | 'child') => {
     const isId = i18n.language?.startsWith('id');
-    if (profile?.role !== 'parent') {
+    if ((profile?.role || 'parent') !== 'parent') {
       alert(isId ? "Hanya Orang Tua yang dapat mengubah peran!" : "Only Parents can change roles!");
       return;
     }
     
+    // Find target member currently
+    const targetMember = familyMembers.find(m => m.uid === targetUid);
+    if (!targetMember) return;
+    const currentRole = targetMember.role || 'parent';
+    if (currentRole === newRole) return; // No change
+    
+    if (newRole === 'parent') {
+      // Calculate parents count (excluding the target member in case they are child currently)
+      const parentCount = familyMembers.filter(m => m.uid !== targetUid && (m.role === 'parent' || !m.role)).length;
+      // Since the logged-in user is a parent, parentCount includes at least 1.
+      // Maximum parents is 2 (the user themselves + 1 spouse/parent)
+      if (parentCount >= 2) {
+        alert(isId 
+          ? "Maksimal Orang Tua (Parent) di ruang ini adalah 2 orang (Anda dan Pasangan/Istri)!" 
+          : "Maximum Parents in this space is 2 (You and your spouse)!");
+        return;
+      }
+    } else if (newRole === 'child') {
+      // Calculate children count (excluding the target member in case they are parent currently)
+      const childCount = familyMembers.filter(m => m.uid !== targetUid && m.role === 'child').length;
+      if (childCount >= 3) {
+        alert(isId 
+          ? "Maksimal Anak (Child) di ruang ini adalah 3 anak!" 
+          : "Maximum Children in this space is 3!");
+        return;
+      }
+    }
+    
     try {
+      console.log('[handleUpdateRole] attempting update', { targetUid, newRole, callerUid: user?.uid, callerRole: profile?.role });
       await updateDoc(doc(db, 'users', targetUid), {
         role: newRole
       });
       setFamilyMembers(prev => prev.map(m => m.uid === targetUid ? { ...m, role: newRole } : m));
       alert(isId ? "Peran berhasil diperbarui!" : "Role updated successfully!");
     } catch (err: any) {
-      console.error("Failed to update role:", err);
+      console.error('[handleUpdateRole] FAILED', { targetUid, newRole, err });
       alert((isId ? "Gagal memperbarui peran: " : "Failed to update role: ") + (err?.message || err));
     }
   };
@@ -135,6 +190,27 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
         return;
       }
 
+      // Count target family members to check capacity and set default role
+      const targetMembersQuery = query(collection(db, 'users'), where('familyId', '==', newFamilyId));
+      const targetMembersSnap = await getDocs(targetMembersQuery);
+      const targetMembers = targetMembersSnap.docs.map(doc => doc.data());
+
+      const parentCount = targetMembers.filter(m => m.role === 'parent' || !m.role).length;
+      const childCount = targetMembers.filter(m => m.role === 'child').length;
+
+      let assignedRole: 'parent' | 'child' = 'parent';
+      if (parentCount >= 2) {
+        assignedRole = 'child';
+      }
+
+      if (assignedRole === 'child' && childCount >= 3) {
+        alert(isId 
+          ? "Gagal bergabung: Ruang ini sudah mencapai kapasitas maksimal (2 Orang Tua dan 3 Anak)!" 
+          : "Failed to join: This space has reached its maximum capacity (2 Parents and 3 Children)!");
+        setIsJoining(false);
+        return;
+      }
+
       // Add user to new family members
       await updateDoc(doc(db, 'families', newFamilyId), {
         members: arrayUnion(user.uid)
@@ -143,7 +219,7 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
       // Update user profile to new familyId and save specific space reference
       const profileUpdates: any = { 
         familyId: newFamilyId,
-        role: 'parent' 
+        role: assignedRole 
       };
 
       if (targetSpaceType === 'unmarried') {
@@ -542,15 +618,31 @@ export function SettingsModal({ isOpen, onClose, family }: { isOpen: boolean, on
                                 </div>
                               </div>
                               
-                              {!isSelf && profile?.role === 'parent' && (
-                                <select
-                                  value={memberRole}
-                                  onChange={(e) => handleUpdateRole(member.uid, e.target.value as 'parent' | 'child')}
-                                  className="text-xs bg-white border border-stone-200 rounded-xl px-2.5 py-1.5 font-bold text-stone-700 focus:outline-none focus:ring-1 focus:ring-stone-400"
+                              {!isSelf && (profile?.role || 'parent') === 'parent' ? (
+                                <div 
+                                  className="flex gap-1 bg-stone-100 p-1 rounded-xl flex-shrink-0 border border-stone-200/40 relative z-20"
+                                  onClick={(e) => e.stopPropagation()}
+                                  onTouchStart={(e) => e.stopPropagation()}
                                 >
-                                  <option value="parent">{isId ? 'Orang Tua' : 'Parent'}</option>
-                                  <option value="child">{isId ? 'Anak (Child)' : 'Child'}</option>
-                                </select>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateRole(member.uid, 'parent')}
+                                    className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${memberRole === 'parent' ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
+                                  >
+                                    {isId ? 'Ortu' : 'Parent'}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateRole(member.uid, 'child')}
+                                    className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1.5 rounded-lg transition-all cursor-pointer ${memberRole === 'child' ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-400 hover:text-stone-600'}`}
+                                  >
+                                    {isId ? 'Anak' : 'Child'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <span className="text-[10px] font-extrabold uppercase tracking-widest text-stone-400 bg-stone-100 px-2.5 py-1 rounded-lg flex-shrink-0">
+                                  {memberRole === 'parent' ? (isId ? 'Orang Tua' : 'Parent') : (isId ? 'Anak' : 'Child')}
+                                </span>
                               )}
                             </div>
                           );
