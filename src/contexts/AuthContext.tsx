@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
+import {
+  User,
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signInAnonymously as firebaseSignInAnonymously,
+} from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import { auth, db, googleProvider } from '../lib/firebase';
 
@@ -8,6 +16,8 @@ interface AuthContextType {
   profile: any | null;
   loading: boolean;
   signIn: (forceSelectAccount?: boolean) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signInAnonymously: () => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -184,6 +194,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  /**
+   * Email/password sign-in — staging-friendly, works in headless/automated browsers.
+   * Creates the account on first use, then signs in on subsequent calls.
+   */
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+    } catch (error: any) {
+      if (error?.code === 'auth/user-not-found' || error?.code === 'auth/invalid-credential') {
+        // Create the account and sign in
+        await createUserWithEmailAndPassword(auth, email, password);
+      } else {
+        console.error('Email sign-in error', error?.message || error);
+        throw error;
+      }
+    }
+  };
+
+  /**
+   * Anonymous sign-in — zero-friction path for automated tests that only
+   * need a valid session to reach protected routes.
+   */
+  const signInAnonymously = async () => {
+    try {
+      await firebaseSignInAnonymously(auth);
+    } catch (error: any) {
+      console.error('Anonymous sign-in error', error?.message || error);
+      throw error;
+    }
+  };
+
   const logout = async () => {
     try {
       await signOut(auth);
@@ -193,7 +234,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signIn, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, signIn, signInWithEmail, signInAnonymously, logout }}>
       {children}
     </AuthContext.Provider>
   );

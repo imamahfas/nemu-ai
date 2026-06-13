@@ -3,7 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Dashboard from './views/Dashboard';
 import { InstallPWA } from './components/InstallPWA';
-import { LogIn, Sparkles, Languages } from 'lucide-react';
+import { LogIn, Sparkles, Languages, Mail, UserX } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { SplashScreen } from './components/SplashScreen';
@@ -23,14 +23,46 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function LoginPage() {
-  const { signIn, user } = useAuth();
+  const { signIn, signInWithEmail, signInAnonymously, user } = useAuth();
   const { t, i18n } = useTranslation();
+  const [testEmail, setTestEmail] = useState('');
+  const [testPassword, setTestPassword] = useState('');
+  const [testError, setTestError] = useState('');
+  const [testLoading, setTestLoading] = useState(false);
+
+  // Show test auth panel when ?test=1 is present in URL
+  const isTestMode = typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('test') === '1';
 
   const toggleLanguage = () => {
     i18n.changeLanguage(i18n.language === 'id' ? 'en' : 'id');
   };
   
   if (user) return <Navigate to="/" />;
+
+  const handleTestEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTestError('');
+    setTestLoading(true);
+    try {
+      await signInWithEmail(testEmail, testPassword);
+    } catch (err: any) {
+      setTestError(err?.message || 'Sign-in failed');
+    } finally {
+      setTestLoading(false);
+    }
+  };
+
+  const handleTestAnonymous = async () => {
+    setTestError('');
+    setTestLoading(true);
+    try {
+      await signInAnonymously();
+    } catch (err: any) {
+      setTestError(err?.message || 'Anonymous sign-in failed');
+    } finally {
+      setTestLoading(false);
+    }
+  };
   
   return (
     <div className="min-h-screen bg-[#fdfcfb] flex flex-col items-center justify-center p-8 text-stone-900 overflow-hidden relative">
@@ -99,6 +131,7 @@ function LoginPage() {
 
         <div className="space-y-4">
           <button 
+            id="btn-google-signin"
             onClick={() => signIn()}
             className="w-full h-16 bg-stone-900 text-white rounded-[2rem] font-bold flex items-center justify-center gap-3 hover:bg-stone-800 transition-all active:scale-95 shadow-2xl shadow-stone-300"
           >
@@ -114,6 +147,68 @@ function LoginPage() {
             <div className="h-[1px] flex-1 bg-stone-100" />
           </div>
         </div>
+
+        {/* ── Test / Staging Auth Panel ────────────────────────────────────────────
+             Visible only when ?test=1 is appended to the URL.
+             Provides email/password and anonymous sign-in so automated test
+             runners can authenticate without triggering Google's popup-security
+             rejection in headless / sandboxed browser environments.
+        ──────────────────────────────────────────────────────────────────────── */}
+        {isTestMode && (
+          <motion.div
+            id="test-auth-panel"
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="border border-dashed border-amber-300 bg-amber-50/60 rounded-[1.5rem] p-5 text-left space-y-3"
+          >
+            <p className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">🧪 Test Mode Auth</p>
+
+            <form onSubmit={handleTestEmailSignIn} className="space-y-2" id="form-test-email-signin">
+              <input
+                id="input-test-email"
+                type="email"
+                placeholder="test@example.com"
+                value={testEmail}
+                onChange={e => setTestEmail(e.target.value)}
+                className="w-full px-4 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                required
+              />
+              <input
+                id="input-test-password"
+                type="password"
+                placeholder="password (min 6 chars)"
+                value={testPassword}
+                onChange={e => setTestPassword(e.target.value)}
+                className="w-full px-4 py-2 rounded-xl border border-stone-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-300"
+                required
+                minLength={6}
+              />
+              <button
+                id="btn-test-email-signin"
+                type="submit"
+                disabled={testLoading}
+                className="w-full h-10 bg-amber-400 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-amber-500 transition-all disabled:opacity-50"
+              >
+                <Mail size={16} />
+                {testLoading ? 'Signing in…' : 'Sign in with Email'}
+              </button>
+            </form>
+
+            <button
+              id="btn-test-anonymous-signin"
+              onClick={handleTestAnonymous}
+              disabled={testLoading}
+              className="w-full h-10 bg-stone-200 text-stone-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-stone-300 transition-all disabled:opacity-50"
+            >
+              <UserX size={16} />
+              Sign in Anonymously
+            </button>
+
+            {testError && (
+              <p id="test-auth-error" className="text-xs text-red-500 text-center">{testError}</p>
+            )}
+          </motion.div>
+        )}
       </motion.div>
     </div>
   );
@@ -135,6 +230,15 @@ function AppContent() {
       <InstallPWA />
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        {/* /app is a canonical alias for the protected dashboard root */}
+        <Route
+          path="/app"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route 
           path="/" 
           element={
@@ -143,6 +247,8 @@ function AppContent() {
             </ProtectedRoute>
           } 
         />
+        {/* Catch-all: redirect any unknown path to root */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </>
   );

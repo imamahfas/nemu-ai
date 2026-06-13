@@ -12,12 +12,20 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        injectRegister: null,
+        // 'auto' injects the SW registration script automatically (was null = disabled)
+        injectRegister: 'auto',
         includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        // Enable manifest + SW serving in dev so test runners can verify installability
+        devOptions: {
+          enabled: true,
+          type: 'module',
+        },
         manifest: {
           name: 'Nemu Family Finance',
           short_name: 'Nemu',
           description: 'Premium Family Finance with AI Smart Scanning',
+          start_url: '/',
+          scope: '/',
           theme_color: '#09090b',
           background_color: '#09090b',
           display: 'standalone',
